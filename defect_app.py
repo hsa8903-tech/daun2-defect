@@ -6,25 +6,22 @@ import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from PIL import Image # 도면 이미지를 불러오기 위한 도구 추가
 
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 지하주차장 하자 관리", layout="wide")
 st.title("🚧 울산 다운 2지구 B2BL 지하주차장 하자 통합 관리 시스템")
 
 # ==========================================
-# 🚨 [수정할 부분] 1단계에서 메모해둔 주소를 아래에 붙여넣으세요! 🚨
+# 🚨 [수정할 부분] 과장님의 시트 주소와 폴더 ID를 다시 적어주세요! 🚨
 # ==========================================
-# 1. 구글 시트 주소 (edit 앞까지의 긴 글자 포함 전체 주소)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
-
-# 2. 구글 드라이브 사진 폴더 ID (긴 글자만)
 FOLDER_ID = "https://drive.google.com/drive/folders/1tvGExHwTYmvuYNa9lzMJWSVDr9I3GbAf"
 # ==========================================
 
 
 @st.cache_resource
 def get_drive_service():
-    # 비밀키를 이용해 드라이브에 접속
     creds = service_account.Credentials.from_service_account_info(
         st.secrets["connections"]["gsheets"],
         scopes=['https://www.googleapis.com/auth/drive']
@@ -116,10 +113,20 @@ with col1:
             name='완료'
         ))
 
-    # 도면 배경 이미지 (추후 실제 도면으로 변경)
+    # ==========================================
+    # 실제 도면 이미지 파일을 불러와서 배경으로 씁니다.
+    # ==========================================
+    try:
+        # 1단계에서 저장한 이미지 이름과 똑같아야 합니다. 
+        # (jpg로 하셨다면 "basement_map.jpg"로 바꿔주세요)
+        bg_image = Image.open("basement_map.png") 
+    except:
+        # 혹시 이미지를 못 찾았을 때 띄우는 임시 화면입니다.
+        bg_image = "https://via.placeholder.com/800x600.png?text=Image+Not+Found"
+
     fig.update_layout(
         images=[dict(
-            source="https://via.placeholder.com/800x600.png?text=Ulsan+Daun+B2BL+Underground+Parking",
+            source=bg_image,
             xref="x", yref="y",
             x=0, y=100, sizex=100, sizey=100,
             sizing="stretch", opacity=0.8, layer="below"
