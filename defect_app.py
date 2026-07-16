@@ -18,14 +18,12 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8
 # ==========================================
 
 def upload_image_to_imgbb(file_bytes):
-    # 1. 스트림릿 서버에 열쇠가 잘 입력되었는지 검사합니다.
     try:
         api_key = st.secrets["IMGBB_API_KEY"]
     except:
         return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
         
     try:
-        # 2. 이미지 용량 가볍게 압축
         img = Image.open(io.BytesIO(file_bytes))
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
@@ -35,7 +33,6 @@ def upload_image_to_imgbb(file_bytes):
         img.save(output_buffer, format="JPEG", quality=80)
         upload_bytes = output_buffer.getvalue()
         
-        # 3. ImgBB 서버로 전송
         url = "https://api.imgbb.com/1/upload"
         payload = {
             "key": api_key,
@@ -82,7 +79,15 @@ def register_defect(x, y):
     st.info("터치하신 위치에 새로운 하자를 등록합니다.")
     new_title = st.text_input("하자명 (예: 누수, 크랙)")
     new_detail = st.text_area("상세 내용")
-    img_buffer = st.camera_input("📸 현장 사진 촬영")
+    
+    # 💡 [추가된 부분] 현장 상황에 맞게 사진 첨부 방식을 고를 수 있습니다.
+    upload_type = st.radio("사진 첨부 방식", ["🖼️ 사진첩에서 선택", "📸 카메라로 바로 촬영"], horizontal=True)
+    
+    img_buffer = None
+    if upload_type == "🖼️ 사진첩에서 선택":
+        img_buffer = st.file_uploader("인터넷이 터지는 곳에서 미리 찍어둔 사진을 올려주세요.", type=['jpg', 'jpeg', 'png'])
+    else:
+        img_buffer = st.camera_input("📸 현장 사진 촬영")
     
     if st.button("등록하기", type="primary", use_container_width=True):
         if new_title:
@@ -91,7 +96,6 @@ def register_defect(x, y):
                 if img_buffer is not None:
                     photo_link = upload_image_to_imgbb(img_buffer.getvalue())
                     
-                    # 💡 [핵심 수정] 업로드 실패 시 글자 저장도 멈추고 원인을 화면에 계속 띄워둡니다!
                     if photo_link.startswith("ERROR"):
                         st.error(f"🚨 사진 업로드 실패 원인:\n{photo_link}")
                         st.stop()
