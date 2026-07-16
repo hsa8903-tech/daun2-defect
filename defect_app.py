@@ -114,13 +114,14 @@ with col1:
         ))
 
     # ==========================================
-    # 도면 이미지 파일을 웹용(Base64)으로 변환해서 넣기
+    # JPG 도면 이미지 파일을 웹용으로 변환해서 넣기
     # ==========================================
     try:
-        # basement_map.jpg 파일을 읽어서 인터넷 화면에 맞게 암호화합니다.
+        # 파일 이름을 basement_map.jpg 로 정확히 찾습니다.
         with open("basement_map.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-        bg_image = "data:image/png;base64," + encoded_string
+        # 암호화 방식도 jpeg용으로 변경했습니다.
+        bg_image = "data:image/jpeg;base64," + encoded_string
     except:
         bg_image = "https://via.placeholder.com/800x600.png?text=Image+Not+Found"
 
