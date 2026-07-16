@@ -12,15 +12,20 @@ import math
 st.set_page_config(page_title="다운 2지구 지하주차장 하자 관리", layout="wide")
 
 # ==========================================
-# 🚨 [수정할 부분] 시트 주소만 다시 적어주세요! (사진 폴더 ID는 이제 안 씁니다)
+# 🚨 [수정할 부분] 시트 주소만 다시 적어주세요! 
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 구글 드라이브 대신 빠르고 간편한 ImgBB 서버로 사진을 올리는 함수입니다.
 def upload_image_to_imgbb(file_bytes):
+    # 1. 스트림릿 서버에 열쇠가 잘 입력되었는지 검사합니다.
     try:
-        # 1. 사진 용량 가볍게 압축
+        api_key = st.secrets["IMGBB_API_KEY"]
+    except:
+        return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
+        
+    try:
+        # 2. 이미지 용량 가볍게 압축
         img = Image.open(io.BytesIO(file_bytes))
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
@@ -30,11 +35,10 @@ def upload_image_to_imgbb(file_bytes):
         img.save(output_buffer, format="JPEG", quality=80)
         upload_bytes = output_buffer.getvalue()
         
-        # 2. ImgBB 서버로 전송
-        api_key = st.secrets["IMGBB_API_KEY"]
-        url = f"https://api.imgbb.com/1/upload?key={api_key}"
-        
+        # 3. ImgBB 서버로 전송
+        url = "https://api.imgbb.com/1/upload"
         payload = {
+            "key": api_key,
             "image": base64.b64encode(upload_bytes).decode('utf-8')
         }
         response = requests.post(url, data=payload)
@@ -42,10 +46,9 @@ def upload_image_to_imgbb(file_bytes):
         if response.status_code == 200:
             return response.json()['data']['url']
         else:
-            return ""
+            return f"ERROR: 서버 거절 사유 ({response.text})"
     except Exception as e:
-        st.error(f"사진 업로드 에러: {e}")
-        return ""
+        return f"ERROR: 코드 실행 오류 ({str(e)})"
 
 # 시트 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -62,7 +65,7 @@ def show_defect_details(row_idx, row_data):
     st.write(f"**하자명:** {row_data['title']}")
     st.write(f"**상세 내용:** {row_data['detail']}")
     
-    if pd.notna(row_data.get('photo_url')) and row_data['photo_url'] != "":
+    if pd.notna(row_data.get('photo_url')) and row_data['photo_url'] != "" and not row_data['photo_url'].startswith("ERROR"):
         st.image(row_data['photo_url'], use_container_width=True)
     
     if row_data['status'] == '처리중':
@@ -86,8 +89,12 @@ def register_defect(x, y):
             with st.spinner('안전한 이미지 서버로 사진을 전송 중입니다...'):
                 photo_link = ""
                 if img_buffer is not None:
-                    # ImgBB 업로드 함수 사용
                     photo_link = upload_image_to_imgbb(img_buffer.getvalue())
+                    
+                    # 💡 [핵심 수정] 업로드 실패 시 글자 저장도 멈추고 원인을 화면에 계속 띄워둡니다!
+                    if photo_link.startswith("ERROR"):
+                        st.error(f"🚨 사진 업로드 실패 원인:\n{photo_link}")
+                        st.stop()
                 
                 new_data = pd.DataFrame([{
                     'id': len(df) + 1, 'x': x, 'y': y, 
