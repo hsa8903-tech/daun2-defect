@@ -3,10 +3,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from streamlit_gsheets import GSheetsConnection
 import io
+import base64
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-from PIL import Image # 도면 이미지를 불러오기 위한 도구 추가
 
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 지하주차장 하자 관리", layout="wide")
@@ -114,14 +114,14 @@ with col1:
         ))
 
     # ==========================================
-    # 실제 도면 이미지 파일을 불러와서 배경으로 씁니다.
+    # 도면 이미지 파일을 웹용(Base64)으로 변환해서 넣기
     # ==========================================
     try:
-        # 1단계에서 저장한 이미지 이름과 똑같아야 합니다. 
-        # (jpg로 하셨다면 "basement_map.jpg"로 바꿔주세요)
-        bg_image = Image.open("basement_map.png") 
+        # basement_map.png 파일을 읽어서 인터넷 화면에 맞게 암호화합니다.
+        with open("basement_map.png", "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        bg_image = "data:image/png;base64," + encoded_string
     except:
-        # 혹시 이미지를 못 찾았을 때 띄우는 임시 화면입니다.
         bg_image = "https://via.placeholder.com/800x600.png?text=Image+Not+Found"
 
     fig.update_layout(
