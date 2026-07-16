@@ -29,8 +29,28 @@ def get_drive_service():
 
 def upload_image_to_drive(file_bytes, filename):
     drive_service = get_drive_service()
+    
+    # 💡 [추가된 부분] 스마트폰 고화질 사진을 가볍게 압축하는 마법의 코드입니다.
+    try:
+        img = Image.open(io.BytesIO(file_bytes))
+        # 혹시 모를 투명 배경 에러 방지를 위해 RGB 변환
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        # 가로세로 최대 1024 픽셀 비율로 축소
+        img.thumbnail((1024, 1024))
+        
+        output_buffer = io.BytesIO()
+        # 품질을 80%로 낮춰서 용량을 확 줄입니다.
+        img.save(output_buffer, format="JPEG", quality=80)
+        upload_bytes = output_buffer.getvalue()
+    except:
+        # 혹시 압축에 실패하면 원본을 그대로 씁니다.
+        upload_bytes = file_bytes
+
     file_metadata = {'name': filename, 'parents': [FOLDER_ID]}
-    media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype='image/jpeg', resumable=True)
+    
+    # 💡 resumable=False 로 변경하여 모바일 데이터 끊김 에러를 원천 차단합니다.
+    media = MediaIoBaseUpload(io.BytesIO(upload_bytes), mimetype='image/jpeg', resumable=False)
     file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
     return file.get('webViewLink')
 
@@ -56,7 +76,6 @@ def show_defect_details(row_idx, row_data):
         st.warning("현재 처리 대기 중인 하자입니다.")
         if st.button("✅ 처리 완료 (초록색으로 변경)", type="primary", use_container_width=True):
             df.at[row_idx, 'status'] = '완료'
-            # [에러 해결 부분] spreadsheet=SHEET_URL 주소를 정확히 추가했습니다!
             conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=df)
             st.session_state['last_click'] = None
             st.rerun()
@@ -70,7 +89,7 @@ def register_defect(x, y):
     
     if st.button("등록하기", type="primary", use_container_width=True):
         if new_title:
-            with st.spinner('구글 드라이브에 사진 업로드 중...'):
+            with st.spinner('구글 드라이브에 사진 업로드 중... (압축 적용)'):
                 photo_link = ""
                 if img_buffer is not None:
                     file_name = f"defect_{len(df)+1}.jpg"
@@ -83,7 +102,6 @@ def register_defect(x, y):
                 }])
                 
                 updated_df = pd.concat([df, new_data], ignore_index=True)
-                # [에러 해결 부분] 여기도 주소를 정확히 추가했습니다!
                 conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=updated_df)
                 
             st.success("등록 완료!")
@@ -104,7 +122,7 @@ except:
 
 # 2. 이미지 위에 기존 하자들 동그라미 그리기
 draw = ImageDraw.Draw(base_img)
-marker_radius = 25  # 동그라미 크기 (터치하기 좋게 약간 크게 설정)
+marker_radius = 25  # 동그라미 크기
 
 for idx, row in df.iterrows():
     if hide_completed and row['status'] == '완료':
@@ -113,20 +131,18 @@ for idx, row in df.iterrows():
     try:
         x, y = float(row['x']), float(row['y'])
         color = "red" if row['status'] == '처리중' else "green"
-        # 테두리가 굵은 하얀색인 동그라미 그리기
         draw.ellipse(
             (x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), 
             fill=color, outline="white", width=4
         )
     except:
-        pass # 구데이터 오류 방지
+        pass
 
 # 3. 터치(클릭) 가능한 이미지 띄우기
 value = streamlit_image_coordinates(base_img, key="map")
 
 # 4. 터치(클릭) 이벤트 처리
 if value is not None:
-    # 중복 터치로 창이 여러 개 뜨는 것을 방지
     if 'last_click' not in st.session_state or st.session_state['last_click'] != value:
         st.session_state['last_click'] = value
         
@@ -134,22 +150,19 @@ if value is not None:
         clicked_marker_idx = None
         clicked_marker_data = None
         
-        # 터치한 곳이 기존 동그라미 근처인지 확인
         for idx, row in df.iterrows():
             if hide_completed and row['status'] == '완료':
                 continue
             try:
                 mx, my = float(row['x']), float(row['y'])
-                # 피타고라스 정리로 터치한 곳과 동그라미 사이의 거리 계산
                 dist = math.sqrt((mx - clicked_x)**2 + (my - clicked_y)**2)
-                if dist <= marker_radius * 1.5:  # 손가락 굵기를 고려해 터치 반경 넉넉하게
+                if dist <= marker_radius * 1.5: 
                     clicked_marker_idx = idx
                     clicked_marker_data = row
                     break
             except:
                 pass
         
-        # 결과에 따라 팝업창 띄우기
         if clicked_marker_data is not None:
             show_defect_details(clicked_marker_idx, clicked_marker_data)
         else:
