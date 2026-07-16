@@ -118,7 +118,7 @@ with col1:
     # ==========================================
     try:
         # basement_map.png 파일을 읽어서 인터넷 화면에 맞게 암호화합니다.
-        with open("basement_map.png", "rb") as image_file:
+        with open("basement_map.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image = "data:image/png;base64," + encoded_string
     except:
