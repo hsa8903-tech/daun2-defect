@@ -117,7 +117,7 @@ with col1:
     # 도면 이미지 파일을 웹용(Base64)으로 변환해서 넣기
     # ==========================================
     try:
-        # basement_map.png 파일을 읽어서 인터넷 화면에 맞게 암호화합니다.
+        # basement_map.jpg 파일을 읽어서 인터넷 화면에 맞게 암호화합니다.
         with open("basement_map.jpg", "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
         bg_image = "data:image/png;base64," + encoded_string
