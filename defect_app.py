@@ -5,6 +5,7 @@ import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.errors import HttpError  # 💡 에러 추적용 도구 추가
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
@@ -30,29 +31,29 @@ def get_drive_service():
 def upload_image_to_drive(file_bytes, filename):
     drive_service = get_drive_service()
     
-    # 💡 [추가된 부분] 스마트폰 고화질 사진을 가볍게 압축하는 마법의 코드입니다.
     try:
         img = Image.open(io.BytesIO(file_bytes))
-        # 혹시 모를 투명 배경 에러 방지를 위해 RGB 변환
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
-        # 가로세로 최대 1024 픽셀 비율로 축소
         img.thumbnail((1024, 1024))
         
         output_buffer = io.BytesIO()
-        # 품질을 80%로 낮춰서 용량을 확 줄입니다.
         img.save(output_buffer, format="JPEG", quality=80)
         upload_bytes = output_buffer.getvalue()
     except:
-        # 혹시 압축에 실패하면 원본을 그대로 씁니다.
         upload_bytes = file_bytes
 
     file_metadata = {'name': filename, 'parents': [FOLDER_ID]}
-    
-    # 💡 resumable=False 로 변경하여 모바일 데이터 끊김 에러를 원천 차단합니다.
     media = MediaIoBaseUpload(io.BytesIO(upload_bytes), mimetype='image/jpeg', resumable=False)
-    file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
-    return file.get('webViewLink')
+    
+    # 💡 [추가된 부분] 숨겨진 구글의 에러 메시지를 강제로 화면에 띄웁니다!
+    try:
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        return file.get('webViewLink')
+    except HttpError as error:
+        error_msg = error.content.decode('utf-8')
+        st.error(f"🚨 [사진 업로드 실패] 구글이 거절한 진짜 이유:\n{error_msg}")
+        st.stop()
 
 # 시트 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
