@@ -16,7 +16,7 @@ st.set_page_config(page_title="다운 2지구 지하주차장 하자 관리", la
 # 🚨 [수정할 부분] 시트 주소와 폴더 ID 다시 적기
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
-FOLDER_ID = "https://drive.google.com/drive/folders/1tvGExHwTYmvuYNa9lzMJWSVDr9I3GbAf"
+FOLDER_ID = "1tvGExHwTYmvuYNa9lzMJWSVDr9I3GbAf"
 # ==========================================
 
 @st.cache_resource
