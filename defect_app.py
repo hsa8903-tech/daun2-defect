@@ -52,13 +52,14 @@ def upload_image_to_imgbb(file_bytes):
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
 
+# 💡 [핵심 업데이트] photo_url_2 컬럼 초기화 처리
 if df.empty:
-    df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url'])
+    df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2'])
 else:
-    if 'photo_url' not in df.columns:
-        df['photo_url'] = None
-    if 'floor' not in df.columns:
-        df['floor'] = '지하 1층'
+    if 'photo_url' not in df.columns: df['photo_url'] = None
+    # 시트에 photo_url_2가 없으면 빈 컬럼 생성
+    if 'photo_url_2' not in df.columns: df['photo_url_2'] = None
+    if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 기타"]
 
@@ -73,8 +74,17 @@ def show_defect_details(row_idx, row_data, map_image):
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
     
-    if pd.notna(row_data.get('photo_url')) and row_data['photo_url'] != "" and not row_data['photo_url'].startswith("ERROR"):
-        st.image(row_data['photo_url'], use_container_width=True)
+    # 💡 [업데이트] 상세 화면에서 사진 2장 표시
+    col_img1, col_img2 = st.columns(2)
+    p1_url = row_data.get('photo_url')
+    p2_url = row_data.get('photo_url_2')
+
+    with col_img1:
+        if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"):
+            st.image(p1_url, caption="사진 1", use_container_width=True)
+    with col_img2:
+        if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"):
+            st.image(p2_url, caption="사진 2", use_container_width=True)
     
     st.write("---")
     
@@ -99,42 +109,41 @@ def show_defect_details(row_idx, row_data, map_image):
             st.success("조치 완료됨")
             
     with col3:
-        # 💡 [핵심 반영] 출력용 이미지에 '구름 마크(Revision Cloud)'를 그려줍니다.
+        # 출력용 이미지 생성 (구름 마크 포함)
         print_img = map_image.copy()
         draw_print = ImageDraw.Draw(print_img)
         
         try:
             tx = float(row_data['x'])
             ty = float(row_data['y'])
-            
-            # 구름 마크 전체 반경과 각 볼록한 부분(bump)의 반경 설정
             cloud_radius = 35  
             bump_radius = 15   
-            
-            # 360도를 45도씩 돌면서 볼록한 구름 테두리를 그려줍니다.
             for angle in range(0, 360, 45):
                 rad = math.radians(angle)
                 cx = tx + cloud_radius * math.cos(rad)
                 cy = ty + cloud_radius * math.sin(rad)
-                # 도면을 가리지 않게 안쪽을 채우지 않고 테두리(outline)만 굵은 빨간색으로 그립니다.
                 draw_print.ellipse((cx - bump_radius, cy - bump_radius, cx + bump_radius, cy + bump_radius), outline="red", width=4)
-                
-            # 시인성을 극대화하기 위해 구름마크 정중앙을 가리키는 얇은 가이드 원 추가
             draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
-            
-        except Exception as e:
-            pass
+        except: pass
             
         buffered = io.BytesIO()
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
-        photo_url = row_data.get('photo_url')
-        if pd.notna(photo_url) and photo_url and not str(photo_url).startswith("ERROR"):
-            photo_html = f'<img src="{photo_url}" />'
+        # 💡 [업데이트] 보고서용 사진 HTML 생성 (사진 2장 나란히 배치)
+        photo1_html = ""
+        if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"):
+            photo1_html = f'<img src="{p1_url}" />'
         else:
-            photo_html = '<div style="color: #999; font-size: 15pt; display: flex; height: 100%; align-items: center; justify-content: center;">등록된 사진 없음</div>'
+            photo1_html = '<div class="no-img">사진 1 없음</div>'
+
+        photo2_html = ""
+        if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"):
+            photo2_html = f'<img src="{p2_url}" />'
+        else:
+            photo2_html = '<div class="no-img">사진 2 없음</div>'
             
+        # 💡 [업데이트] A4 출력 레이아웃 개조 (사진 2장 좌우 배치, 그 아래 내용)
         report_html = f"""
         <!DOCTYPE html>
         <html lang="ko">
@@ -143,30 +152,51 @@ def show_defect_details(row_idx, row_data, map_image):
         <title>하자 보고서 (No.{int(row_data['id'])})</title>
         <style>
             @page {{ size: A4 portrait; margin: 10mm; }}
-            body {{ font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 0; }}
-            .page {{ width: 190mm; height: 277mm; margin: 0 auto; display: flex; flex-direction: column; background: white; }}
-            .top {{ height: 50%; border-bottom: 2px solid #333; padding-bottom: 5mm; margin-bottom: 5mm; text-align: center; }}
-            .top img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
-            .bottom {{ height: 50%; display: flex; gap: 5mm; }}
-            .b-left {{ width: 50%; height: 100%; text-align: center; border: 1px solid #ddd; padding: 2mm; box-sizing: border-box; }}
-            .b-left img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
-            .b-right {{ width: 50%; height: 100%; display: flex; flex-direction: column; }}
-            .info-title {{ font-size: 15pt; font-weight: bold; background-color: #f4f4f4; padding: 10px; border-radius: 4px; margin-bottom: 15px; border-left: 5px solid #2196F3; }}
-            .info-detail {{ font-size: 15pt; line-height: 1.6; white-space: pre-wrap; padding: 5px; }}
+            body {{ font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 0; background: #eee;}}
+            .page {{ width: 190mm; height: 277mm; margin: 0 auto; display: flex; flex-direction: column; background: white; padding: 5mm; box-sizing: border-box;}}
+            
+            /* 상단 도면 영역 (50%) */
+            .top-map {{ height: 48%; border-bottom: 2px solid #333; padding-bottom: 3mm; margin-bottom: 5mm; text-align: center; overflow: hidden; }}
+            .top-map img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
+            
+            /* 하단 정보 영역 (50%) */
+            .bottom-info {{ height: 50%; display: flex; flex-direction: column; gap: 5mm; }}
+            
+            /* 하단 - 사진 2장 영역 (좌우 배치) */
+            .photo-section {{ height: 60%; display: flex; gap: 5mm; }}
+            .photo-box {{ width: 50%; height: 100%; text-align: center; border: 1px solid #ddd; padding: 2mm; box-sizing: border-box; display: flex; align-items: center; justify-content: center; overflow: hidden;}}
+            .photo-box img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
+            .no-img {{ color: #999; font-size: 14pt; }}
+
+            /* 하단 - 내용 영역 */
+            .text-section {{ height: 38%; display: flex; flex-direction: column; gap: 3mm;}}
+            .info-header {{ display: flex; gap: 5mm; align-items: center; }}
+            .info-floor {{ font-size: 16pt; font-weight: bold; color: #555; }}
+            .info-title {{ flex-grow: 1; font-size: 18pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #2196F3; }}
+            .info-detail-box {{ border: 1px solid #ccc; border-radius: 4px; padding: 10px; height: 100%; overflow: hidden; }}
+            .info-detail-label {{ font-size: 14pt; font-weight: bold; color: #333; margin-bottom: 5px; display: block;}}
+            .info-detail-content {{ font-size: 15pt; line-height: 1.5; white-space: pre-wrap; color: #444; }}
         </style>
         </head>
         <body>
             <div class="page">
-                <div class="top">
-                    <img src="data:image/jpeg;base64,{map_b64}" alt="해당 층 전체 도면">
+                <div class="top-map">
+                    <img src="data:image/jpeg;base64,{map_b64}" alt="하자 위치 도면">
                 </div>
-                <div class="bottom">
-                    <div class="b-left">
-                        {photo_html}
+                <div class="bottom-info">
+                    <div class="photo-section">
+                        <div class="photo-box">{photo1_html}</div>
+                        <div class="photo-box">{photo2_html}</div>
                     </div>
-                    <div class="b-right">
-                        <div class="info-title">■ 공종: {row_data['title']}</div>
-                        <div class="info-detail"><strong>■ 하자내용:</strong><br><br>{row_data['detail']}</div>
+                    <div class="text-section">
+                        <div class="info-header">
+                            <div class="info-floor">[{row_data['floor']}]</div>
+                            <div class="info-title">공종: {row_data['title']} (No.{int(row_data['id'])})</div>
+                        </div>
+                        <div class="info-detail-box">
+                            <span class="info-detail-label">■ 하자내용</span>
+                            <div class="info-detail-content">{row_data['detail']}</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -201,28 +231,52 @@ def register_defect(x, y, current_floor):
     
     new_title = st.selectbox("하자명", category_list)
     new_detail = st.text_area("하자내용")
+
+    st.write("---")
+    st.subheader("🖼️ 사진 등록 (최대 2장)")
     
-    upload_type = st.radio("사진 첨부 방식", ["🖼️ 사진첩에서 선택", "📸 카메라로 바로 촬영"], horizontal=True)
-    
-    img_buffer = None
-    if upload_type == "🖼️ 사진첩에서 선택":
-        img_buffer = st.file_uploader("사진을 선택해주세요.", type=['jpg', 'jpeg', 'png'])
+    # 💡 [업데이트] 사진 1 입력 영역
+    st.markdown("**[사진 1]**")
+    upload_type1 = st.radio("사진 1 첨부 방식", ["🖼️ 선택", "📸 촬영"], horizontal=True, key="ut1")
+    img_buffer1 = None
+    if upload_type1 == "🖼️ 선택":
+        img_buffer1 = st.file_uploader("사진 1 선택", type=['jpg', 'jpeg', 'png'], key="fu1")
     else:
-        img_buffer = st.camera_input("📸 현장 사진 촬영")
+        img_buffer1 = st.camera_input("📸 사진 1 촬영", key="ci1")
+
+    st.write("---")
+
+    # 💡 [업데이트] 사진 2 입력 영역
+    st.markdown("**[사진 2]**")
+    upload_type2 = st.radio("사진 2 첨부 방식", ["🖼️ 선택", "📸 촬영"], horizontal=True, key="ut2")
+    img_buffer2 = None
+    if upload_type2 == "🖼️ 선택":
+        img_buffer2 = st.file_uploader("사진 2 선택", type=['jpg', 'jpeg', 'png'], key="fu2")
+    else:
+        img_buffer2 = st.camera_input("📸 사진 2 촬영", key="ci2")
     
     if st.button("등록하기", type="primary", use_container_width=True):
         with st.spinner('안전한 이미지 서버로 데이터 전송 중...'):
-            photo_link = ""
-            if img_buffer is not None:
-                photo_link = upload_image_to_imgbb(img_buffer.getvalue())
-                if photo_link.startswith("ERROR"):
-                    st.error(f"🚨 사진 업로드 실패 원인:\n{photo_link}")
+            # 💡 [업데이트] 두 사진 모두 업로드 처리
+            photo_link1 = ""
+            if img_buffer1 is not None:
+                photo_link1 = upload_image_to_imgbb(img_buffer1.getvalue())
+                if photo_link1.startswith("ERROR"):
+                    st.error(f"🚨 사진 1 업로드 실패 원인: {photo_link1}")
+                    st.stop()
+
+            photo_link2 = ""
+            if img_buffer2 is not None:
+                photo_link2 = upload_image_to_imgbb(img_buffer2.getvalue())
+                if photo_link2.startswith("ERROR"):
+                    st.error(f"🚨 사진 2 업로드 실패 원인: {photo_link2}")
                     st.stop()
             
+            # 💡 [업데이트] 데이터프레임에 두 링크 모두 저장
             new_data = pd.DataFrame([{
                 'id': len(df) + 1, 'floor': current_floor, 'x': x, 'y': y, 
                 'title': new_title, 'detail': new_detail, 'status': '처리중',
-                'photo_url': photo_link
+                'photo_url': photo_link1, 'photo_url_2': photo_link2
             }])
             
             updated_df = pd.concat([df, new_data], ignore_index=True)
