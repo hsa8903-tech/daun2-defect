@@ -12,10 +12,22 @@ import streamlit.components.v1 as components
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
 
+# 💡 [핵심 반영] 스마트폰 브라우저의 '확대 금지' 설정을 강제로 풀어주는 스크립트
+components.html(
+    """
+    <script>
+    const parentMeta = window.parent.document.querySelector('meta[name="viewport"]');
+    if (parentMeta) {
+        parentMeta.content = "width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes";
+    }
+    </script>
+    """,
+    height=0
+)
+
 # 💡 [디자인 업그레이드] 우미건설 공식 네이비 톤 적용 및 문구 수정
 st.markdown("""
 <style>
-    /* 메인 타이틀 박스 디자인 (사진에서 추출한 우미건설 네이비 톤) */
     .title-container {
         background: linear-gradient(135deg, #132B45, #1E3F66);
         padding: 25px 20px;
@@ -31,14 +43,12 @@ st.markdown("""
         letter-spacing: -0.5px;
     }
     .sub-title {
-        color: #FFC000 !important; /* 네이비에 어울리는 개나리색 */
+        color: #FFC000 !important; 
         font-size: 16px;
         font-weight: 600;
         margin: 0;
         letter-spacing: 0.5px;
     }
-    
-    /* 💡 설비팀 강조 배지 디자인 (구축 단어 삭제) */
     .team-badge {
         display: inline-block;
         background-color: #0D2238;
@@ -51,8 +61,6 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         border: 1px solid #1A365D;
     }
-    
-    /* 안내 문구 박스 */
     .info-box {
         background-color: #f8f9fa;
         border-left: 4px solid #132B45;
@@ -62,15 +70,11 @@ st.markdown("""
         font-size: 14px;
         color: #333;
     }
-
-    /* 버튼 모서리를 둥글고 세련되게 */
     div.stButton > button {
         border-radius: 8px !important;
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
     }
-    
-    /* 토글 스위치 정렬 */
     .stToggle { margin-top: 10px; }
 </style>
 """, unsafe_allow_html=True)
@@ -329,7 +333,6 @@ def register_defect(x, y, current_floor):
         st.rerun()
 
 # --- 메인 화면 ---
-# 💡 [디자인 업그레이드] 우미건설 네이비 박스와 흰색/노란색 글자 조합
 st.markdown("""
     <div class="title-container">
         <h1 class="main-title">🏢 우미건설 다운 2지구 B2BL 지하주차장</h1>
@@ -337,7 +340,6 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 💡 [디자인 업그레이드] 설비팀 배지 (구축 단어 삭제)
 st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 설비팀</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 1])
@@ -348,7 +350,7 @@ with col2:
 
 st.markdown("""
     <div class="info-box">
-        💡 <b>스마트폰 두 손가락</b>으로 도면을 자유롭게 확대/축소하세요.<br>
+        💡 <b>도면 바깥쪽(제목이나 여백)에 두 손가락을 대면 화면 확대가 가능합니다!</b><br>
         💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
     </div>
 """, unsafe_allow_html=True)
