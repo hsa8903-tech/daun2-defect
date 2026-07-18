@@ -7,7 +7,7 @@ import base64
 from PIL import Image, ImageDraw, ImageFont 
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
-import streamlit.components.v1 as components  # 💡 출력 버튼용 도구 추가
+import streamlit.components.v1 as components 
 
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 지하주차장 하자 관리", layout="wide")
@@ -78,7 +78,6 @@ def show_defect_details(row_idx, row_data, map_image):
     
     st.write("---")
     
-    # 💡 [업그레이드] 버튼 3개 배치 (수정 / 완료 / 출력)
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -100,9 +99,34 @@ def show_defect_details(row_idx, row_data, map_image):
             st.success("조치 완료됨")
             
     with col3:
-        # 💡 [출력 기능] 도면 이미지와 데이터를 조합하여 A4 출력용 웹페이지를 찰나의 순간에 생성합니다.
+        # 💡 [핵심 반영] 출력용 이미지에 '구름 마크(Revision Cloud)'를 그려줍니다.
+        print_img = map_image.copy()
+        draw_print = ImageDraw.Draw(print_img)
+        
+        try:
+            tx = float(row_data['x'])
+            ty = float(row_data['y'])
+            
+            # 구름 마크 전체 반경과 각 볼록한 부분(bump)의 반경 설정
+            cloud_radius = 35  
+            bump_radius = 15   
+            
+            # 360도를 45도씩 돌면서 볼록한 구름 테두리를 그려줍니다.
+            for angle in range(0, 360, 45):
+                rad = math.radians(angle)
+                cx = tx + cloud_radius * math.cos(rad)
+                cy = ty + cloud_radius * math.sin(rad)
+                # 도면을 가리지 않게 안쪽을 채우지 않고 테두리(outline)만 굵은 빨간색으로 그립니다.
+                draw_print.ellipse((cx - bump_radius, cy - bump_radius, cx + bump_radius, cy + bump_radius), outline="red", width=4)
+                
+            # 시인성을 극대화하기 위해 구름마크 정중앙을 가리키는 얇은 가이드 원 추가
+            draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
+            
+        except Exception as e:
+            pass
+            
         buffered = io.BytesIO()
-        map_image.save(buffered, format="JPEG")
+        print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
         photo_url = row_data.get('photo_url')
@@ -111,7 +135,6 @@ def show_defect_details(row_idx, row_data, map_image):
         else:
             photo_html = '<div style="color: #999; font-size: 15pt; display: flex; height: 100%; align-items: center; justify-content: center;">등록된 사진 없음</div>'
             
-        # A4 세로 비율에 맞춘 완벽한 HTML 레이아웃 템플릿
         report_html = f"""
         <!DOCTYPE html>
         <html lang="ko">
@@ -156,10 +179,9 @@ def show_defect_details(row_idx, row_data, map_image):
         </html>
         """
         
-        # 암호화하여 브라우저 팝업창으로 바로 연결하는 자바스크립트 버튼
         b64_html = base64.b64encode(report_html.encode('utf-8')).decode('utf-8')
         js_button = f"""
-        <button onclick="printReport()" style="width:100%; height: 38px; background-color:#2196F3; color:white; border:none; border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer;">🖨️ A4 보고서 출력</button>
+        <button onclick="printReport()" style="width:100%; height: 38px; background-color:#2196F3; color:white; border:none; border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer;">🖨️ A4 출력</button>
         <script>
         function printReport() {{
             var b64 = "{b64_html}";
@@ -298,7 +320,6 @@ if value is not None:
                 pass
         
         if clicked_marker_data is not None:
-            # 💡 [핵심] 출력 시 도면을 그대로 사용할 수 있도록 완성된 도면(base_img)을 같이 넘겨줍니다.
             show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
         else:
             register_defect(clicked_x, clicked_y, selected_floor)
