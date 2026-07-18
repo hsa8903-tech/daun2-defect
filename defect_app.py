@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import io
 import requests
 import base64
-from PIL import Image, ImageDraw, ImageFont  # 💡 글꼴(Font) 조절 도구 추가
+from PIL import Image, ImageDraw, ImageFont 
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 
@@ -153,19 +153,15 @@ except:
 
 draw = ImageDraw.Draw(base_img)
 
-# 💡 피드백 반영: 마커 크기 8px로 조절
 marker_radius = 8 
 
-# 💡 피드백 반영: 글자 크기를 키우고 굵게(Bold) 설정하는 코드
+# 💡 피드백 반영: 글자 크기를 15에서 18로(1.2배) 더 키웠습니다.
 try:
-    # 스트림릿 서버에 있는 기본 굵은 글꼴 (크기 15)
-    bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 15)
+    bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
 except:
     try:
-        # PC 환경을 위한 맑은 고딕 굵게
-        bold_font = ImageFont.truetype("malgunbd.ttf", 15)
+        bold_font = ImageFont.truetype("malgunbd.ttf", 18)
     except:
-        # 폰트를 못 찾으면 기본 폰트 사용
         bold_font = ImageFont.load_default()
 
 current_floor_df = df[df['floor'] == selected_floor]
@@ -182,7 +178,8 @@ for idx, row in current_floor_df.iterrows():
         else:
             if row['title'] == '1. 설비': color = "blue"
             elif row['title'] == '2. 소방': color = "red"
-            elif row['title'] == '3. 자동제어': color = "yellow"
+            # 💡 피드백 반영: 눈이 아프지 않고 잘 보이는 진한 개나리색(#FFC000)으로 변경
+            elif row['title'] == '3. 자동제어': color = "#FFC000" 
             elif row['title'] == '4. 기타': color = "purple"
             else: color = "red" 
             
@@ -191,20 +188,17 @@ for idx, row in current_floor_df.iterrows():
             fill=color, outline="white", width=1
         )
         
-        # 💡 피드백 반영: 소수점(1.0)을 무조건 정수(1)로 변환
         text_num = str(int(row['id']))
         
-        # 글씨가 커진 만큼 위치를 우측으로 조금 더 이동시킵니다.
-        text_x = x + 10
-        text_y = y - 12
+        # 글씨가 커졌으므로 마커를 가리지 않게 우측과 상단 여백을 조금 더 띄웁니다.
+        text_x = x + 12
+        text_y = y - 15
         
-        # 가독성을 위한 하얀색 테두리 효과
         draw.text((text_x-1, text_y), text_num, fill="white", font=bold_font)
         draw.text((text_x+1, text_y), text_num, fill="white", font=bold_font)
         draw.text((text_x, text_y-1), text_num, fill="white", font=bold_font)
         draw.text((text_x, text_y+1), text_num, fill="white", font=bold_font)
         
-        # 실제 숫자 검은색 굵은 글씨로 출력
         draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
         
     except:
