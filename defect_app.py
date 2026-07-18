@@ -12,12 +12,12 @@ import streamlit.components.v1 as components
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
 
-# 💡 [디자인 업그레이드] 산뜻한 푸른빛 바탕 + 뚜렷한 흰색 글씨 + 설비팀 배지 스타일
+# 💡 [디자인 업그레이드] 우미건설 공식 네이비 톤 적용 및 문구 수정
 st.markdown("""
 <style>
-    /* 메인 타이틀 박스 디자인 (밝고 산뜻한 스마트 블루) */
+    /* 메인 타이틀 박스 디자인 (사진에서 추출한 우미건설 네이비 톤) */
     .title-container {
-        background: linear-gradient(135deg, #1A73E8, #4285F4, #8AB4F8);
+        background: linear-gradient(135deg, #132B45, #1E3F66);
         padding: 25px 20px;
         border-radius: 12px;
         margin-bottom: 20px;
@@ -25,24 +25,23 @@ st.markdown("""
     }
     .main-title {
         color: #FFFFFF !important;
-        text-shadow: 1px 1px 3px rgba(0,0,0,0.3); /* 글자가 돋보이도록 그림자 추가 */
         font-size: 30px;
         font-weight: 900;
         margin: 0 0 8px 0;
         letter-spacing: -0.5px;
     }
     .sub-title {
-        color: #FFEB3B !important; /* 서브타이틀은 밝은 노란색으로 강조 */
+        color: #FFC000 !important; /* 네이비에 어울리는 개나리색 */
         font-size: 16px;
         font-weight: 600;
         margin: 0;
         letter-spacing: 0.5px;
     }
     
-    /* 💡 설비팀 강조 배지 디자인 */
+    /* 💡 설비팀 강조 배지 디자인 (구축 단어 삭제) */
     .team-badge {
         display: inline-block;
-        background-color: #0D47A1;
+        background-color: #0D2238;
         color: #FFFFFF;
         padding: 6px 14px;
         border-radius: 20px;
@@ -50,13 +49,13 @@ st.markdown("""
         font-weight: bold;
         margin-bottom: 15px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        border: 1px solid #1565C0;
+        border: 1px solid #1A365D;
     }
     
     /* 안내 문구 박스 */
     .info-box {
         background-color: #f8f9fa;
-        border-left: 4px solid #4285F4;
+        border-left: 4px solid #132B45;
         padding: 15px;
         border-radius: 5px;
         margin-bottom: 20px;
@@ -220,7 +219,7 @@ def show_defect_details(row_idx, row_data, map_image):
             .text-section {{ height: 38%; display: flex; flex-direction: column; gap: 3mm;}}
             .info-header {{ display: flex; gap: 5mm; align-items: center; }}
             .info-floor {{ font-size: 16pt; font-weight: bold; color: #555; }}
-            .info-title {{ flex-grow: 1; font-size: 18pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #2196F3; }}
+            .info-title {{ flex-grow: 1; font-size: 18pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; }}
             .info-detail-box {{ border: 1px solid #ccc; border-radius: 4px; padding: 10px; height: 100%; overflow: hidden; }}
             .info-detail-label {{ font-size: 14pt; font-weight: bold; color: #333; margin-bottom: 5px; display: block;}}
             .info-detail-content {{ font-size: 15pt; line-height: 1.5; white-space: pre-wrap; color: #444; }}
@@ -259,7 +258,7 @@ def show_defect_details(row_idx, row_data, map_image):
         
         b64_html = base64.b64encode(report_html.encode('utf-8')).decode('utf-8')
         js_button = f"""
-        <button onclick="printReport()" style="width:100%; height: 38px; background-color:#1E3A8A; color:white; border:none; border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer;">🖨️ A4 출력</button>
+        <button onclick="printReport()" style="width:100%; height: 38px; background-color:#132B45; color:white; border:none; border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer;">🖨️ A4 출력</button>
         <script>
         function printReport() {{
             var b64 = "{b64_html}";
@@ -330,7 +329,7 @@ def register_defect(x, y, current_floor):
         st.rerun()
 
 # --- 메인 화면 ---
-# 💡 [디자인 업그레이드] 산뜻한 푸른빛 박스와 흰색/노란색 글자 조합
+# 💡 [디자인 업그레이드] 우미건설 네이비 박스와 흰색/노란색 글자 조합
 st.markdown("""
     <div class="title-container">
         <h1 class="main-title">🏢 우미건설 다운 2지구 B2BL 지하주차장</h1>
@@ -338,8 +337,8 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# 💡 [디자인 업그레이드] 설비팀 구축을 강조하는 자랑스러운 배지 추가!
-st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 설비팀 구축</div>', unsafe_allow_html=True)
+# 💡 [디자인 업그레이드] 설비팀 배지 (구축 단어 삭제)
+st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 설비팀</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 1])
 with col1:
