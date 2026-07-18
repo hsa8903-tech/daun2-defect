@@ -51,21 +51,28 @@ def upload_image_to_imgbb(file_bytes):
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
 
-# 💡 [업그레이드] 층수(floor) 컬럼 자동 추가 기능
 if df.empty:
     df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url'])
 else:
     if 'photo_url' not in df.columns:
         df['photo_url'] = None
     if 'floor' not in df.columns:
-        df['floor'] = '지하 1층'  # 예전 데이터는 기본 지하 1층으로 처리
+        df['floor'] = '지하 1층'
+
+# 공종(하자명) 선택 리스트
+category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 기타"]
 
 # --- 팝업창 (상세 정보 및 수정) ---
 @st.dialog("📋 하자 상세 정보 및 수정")
 def show_defect_details(row_idx, row_data):
-    # 💡 [업그레이드] 텍스트 입력창에 기존 내용을 띄워두고 바로 수정할 수 있게 만듭니다.
-    edit_title = st.text_input("하자명", value=row_data['title'])
-    edit_detail = st.text_area("상세 내용", value=row_data['detail'])
+    # 피드백 반영: 하자명 콤보박스로 변경 및 상세내용 -> 하자내용 변경
+    try:
+        current_idx = category_list.index(row_data['title'])
+    except:
+        current_idx = 3 # 기본값: 기타
+        
+    edit_title = st.selectbox("하자명", category_list, index=current_idx)
+    edit_detail = st.text_area("하자내용", value=row_data['detail'])
     
     if pd.notna(row_data.get('photo_url')) and row_data['photo_url'] != "" and not row_data['photo_url'].startswith("ERROR"):
         st.image(row_data['photo_url'], use_container_width=True)
@@ -95,8 +102,10 @@ def show_defect_details(row_idx, row_data):
 @st.dialog("📝 신규 하자 등록")
 def register_defect(x, y, current_floor):
     st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
-    new_title = st.text_input("하자명 (예: 누수, 크랙)")
-    new_detail = st.text_area("상세 내용")
+    
+    # 피드백 반영: 하자명 리스트 선택 및 라벨 변경
+    new_title = st.selectbox("하자명", category_list)
+    new_detail = st.text_area("하자내용")
     
     upload_type = st.radio("사진 첨부 방식", ["🖼️ 사진첩에서 선택", "📸 카메라로 바로 촬영"], horizontal=True)
     
@@ -107,39 +116,36 @@ def register_defect(x, y, current_floor):
         img_buffer = st.camera_input("📸 현장 사진 촬영")
     
     if st.button("등록하기", type="primary", use_container_width=True):
-        if new_title:
-            with st.spinner('안전한 이미지 서버로 사진을 전송 중입니다...'):
-                photo_link = ""
-                if img_buffer is not None:
-                    photo_link = upload_image_to_imgbb(img_buffer.getvalue())
-                    if photo_link.startswith("ERROR"):
-                        st.error(f"🚨 사진 업로드 실패 원인:\n{photo_link}")
-                        st.stop()
-                
-                new_data = pd.DataFrame([{
-                    'id': len(df) + 1, 'floor': current_floor, 'x': x, 'y': y, 
-                    'title': new_title, 'detail': new_detail, 'status': '처리중',
-                    'photo_url': photo_link
-                }])
-                
-                updated_df = pd.concat([df, new_data], ignore_index=True)
-                conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=updated_df)
-                
-            st.success("등록 완료!")
-            st.session_state['last_click'] = None
-            st.rerun()
+        with st.spinner('안전한 이미지 서버로 데이터 전송 중...'):
+            photo_link = ""
+            if img_buffer is not None:
+                photo_link = upload_image_to_imgbb(img_buffer.getvalue())
+                if photo_link.startswith("ERROR"):
+                    st.error(f"🚨 사진 업로드 실패 원인:\n{photo_link}")
+                    st.stop()
+            
+            new_data = pd.DataFrame([{
+                'id': len(df) + 1, 'floor': current_floor, 'x': x, 'y': y, 
+                'title': new_title, 'detail': new_detail, 'status': '처리중',
+                'photo_url': photo_link
+            }])
+            
+            updated_df = pd.concat([df, new_data], ignore_index=True)
+            conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=updated_df)
+            
+        st.success("등록 완료!")
+        st.session_state['last_click'] = None
+        st.rerun()
 
 # --- 메인 화면 ---
 st.title("🚧 다운 2지구 B2BL 지하주차장 하자 관리")
 
-# 💡 [업그레이드] 층수 선택 메뉴 추가
 selected_floor = st.radio("📍 도면 층수 선택", ["지하 1층", "지하 2층", "지하 3층"], horizontal=True)
 
-st.markdown("💡 **스마트폰 두 손가락으로 도면을 자유롭게 확대/축소** 하세요.<br>💡 **도면의 빈 곳을 터치**하면 하자가 등록되고, **동그라미를 터치**하면 수정 및 완료 처리가 가능합니다.", unsafe_allow_html=True)
+st.markdown("💡 **도면의 빈 곳을 터치**하면 하자가 등록되고, **마커를 터치**하면 수정 및 완료 처리가 가능합니다.", unsafe_allow_html=True)
 
 hide_completed = st.toggle("✅ 완료된 하자(초록색) 숨기기", value=False)
 
-# 선택한 층수에 맞게 도면 파일 연결
 floor_img_map = {
     "지하 1층": "basement_map_b1.jpg",
     "지하 2층": "basement_map_b2.jpg",
@@ -149,14 +155,12 @@ floor_img_map = {
 try:
     base_img = Image.open(floor_img_map[selected_floor])
 except:
-    # 이미지가 없을 경우 빈 회색 도면을 띄워줍니다.
     base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
-# 💡 [업그레이드] 마커 크기를 25에서 절반인 12로 줄였습니다.
-marker_radius = 12 
+# 피드백 반영: 마커 크기 6px로 대폭 축소
+marker_radius = 6 
 
-# 선택한 층수의 하자만 필터링해서 그리기
 current_floor_df = df[df['floor'] == selected_floor]
 
 for idx, row in current_floor_df.iterrows():
@@ -165,11 +169,36 @@ for idx, row in current_floor_df.iterrows():
         
     try:
         x, y = float(row['x']), float(row['y'])
-        color = "red" if row['status'] == '처리중' else "green"
+        
+        # 피드백 반영: 공종에 따른 색상 지정
+        if row['status'] == '완료':
+            color = "green"
+        else:
+            if row['title'] == '1. 설비': color = "blue"
+            elif row['title'] == '2. 소방': color = "red"
+            elif row['title'] == '3. 자동제어': color = "yellow"
+            elif row['title'] == '4. 기타': color = "purple"
+            else: color = "red" # 구 데이터 기본값
+            
+        # 마커(동그라미) 그리기
         draw.ellipse(
             (x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), 
-            fill=color, outline="white", width=2
+            fill=color, outline="white", width=1
         )
+        
+        # 피드백 반영: 마커 우측 상단에 순번(id) 표시 (흰색 그림자 효과 추가로 가독성 확보)
+        text_num = str(row['id'])
+        text_x = x + 8
+        text_y = y - 10
+        
+        # 배경색 대비 글자가 잘 보이도록 약간의 테두리 트릭
+        draw.text((text_x-1, text_y), text_num, fill="white")
+        draw.text((text_x+1, text_y), text_num, fill="white")
+        draw.text((text_x, text_y-1), text_num, fill="white")
+        draw.text((text_x, text_y+1), text_num, fill="white")
+        # 실제 숫자 검은색으로 그리기
+        draw.text((text_x, text_y), text_num, fill="black")
+        
     except:
         pass
 
@@ -189,7 +218,8 @@ if value is not None:
             try:
                 mx, my = float(row['x']), float(row['y'])
                 dist = math.sqrt((mx - clicked_x)**2 + (my - clicked_y)**2)
-                if dist <= marker_radius * 2.0:  # 크기가 줄었으니 터치 범위는 조금 넉넉히 잡습니다
+                # 터치 인식 범위는 손가락 굵기를 고려해 조금 더 넓게 유지합니다 (약 20px 반경)
+                if dist <= 20.0: 
                     clicked_marker_idx = idx
                     clicked_marker_data = row
                     break
