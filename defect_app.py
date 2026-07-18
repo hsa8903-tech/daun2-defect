@@ -126,7 +126,6 @@ else:
 
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 기타"]
 
-# --- 층별 도면 미리 불러오기 맵핑 ---
 floor_img_map = {
     "지하 1층": "basement_map_b1.jpg",
     "지하 2층": "basement_map_b2.jpg",
@@ -234,11 +233,14 @@ def show_defect_details(row_idx, row_data, map_image):
         </body></html>
         """
         
-        b64_html = base64.b64encode(report_html.encode('utf-8')).decode('utf-8')
-        js_button = f"""
-        <button onclick="var b64='{b64_html}';var html=decodeURIComponent(escape(window.atob(b64)));var blob=new Blob([html], {{type: 'text/html;charset=utf-8'}});var url=URL.createObjectURL(blob);window.open(url, '_blank');" style="width:100%; height: 38px; background-color:#132B45; color:white; border:none; border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer;">🖨️ A4 출력</button>
-        """
-        components.html(js_button, height=45)
+        # 💡 [팝업 차단 해결] 새 창 띄우기 대신 파일 다운로드 버튼으로 교체
+        st.download_button(
+            label="🖨️ A4 인쇄용 파일 다운",
+            data=report_html.encode('utf-8'),
+            file_name=f"하자보고서_No{int(row_data['id'])}.html",
+            mime="text/html",
+            use_container_width=True
+        )
 
 @st.dialog("📝 신규 하자 등록")
 def register_defect(x, y, current_floor):
@@ -288,15 +290,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 설비팀</div>', unsafe_allow_html=True)
 
-# 💡 [핵심 기능] 공종별 일괄 출력 모듈 추가
 with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
-    st.info("선택한 공종의 모든 하자 데이터를 A4 보고서 여러 장으로 한 번에 출력합니다.")
+    st.info("선택한 공종의 데이터를 출력용 HTML 파일로 저장합니다. 다운로드 후 파일을 터치하면 인쇄 화면이 뜹니다.")
     print_target = st.selectbox("출력할 공종을 선택하세요", ["전체 출력"] + category_list)
     print_hide_completed = st.checkbox("✅ 완료된 하자(초록색)는 제외하고 출력하기", value=True)
     
-    if st.button("🚀 보고서 생성 시작 (클릭)", type="primary"):
+    if st.button("🚀 일괄 보고서 생성 시작 (클릭)", type="primary"):
         with st.spinner("출력용 데이터를 생성 중입니다... (데이터가 많을 경우 5~10초 소요)"):
-            # 1. 데이터 필터링
             target_df = df if print_target == "전체 출력" else df[df['title'] == print_target]
             if print_hide_completed:
                 target_df = target_df[target_df['status'] != '완료']
@@ -304,7 +304,6 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
             if target_df.empty:
                 st.warning("출력할 데이터가 없습니다.")
             else:
-                # 2. 일괄 출력용 뼈대 HTML (페이지 나누기 css 적용)
                 bulk_html = """
                 <!DOCTYPE html>
                 <html lang="ko">
@@ -312,7 +311,6 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                 <style>
                     @page { size: A4 portrait; margin: 10mm; }
                     body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; background: #eee;}
-                    /* 💡 page-break-after로 A4 장수 구분 */
                     .page { width: 190mm; height: 277mm; margin: 0 auto; display: flex; flex-direction: column; background: white; padding: 5mm; box-sizing: border-box; page-break-after: always; }
                     .top-map { height: 48%; border-bottom: 2px solid #333; padding-bottom: 3mm; margin-bottom: 5mm; text-align: center; overflow: hidden; }
                     .top-map img { max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -331,7 +329,6 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                 </style></head><body>
                 """
                 
-                # 3. 데이터만큼 반복하며 HTML 생성
                 for idx, row_data in target_df.iterrows():
                     try:
                         base_map_print = Image.open(floor_img_map.get(row_data['floor'], "basement_map_b1.jpg")).copy()
@@ -370,20 +367,20 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                     </div>
                     """
                 
-                # 4. 마무리 및 출력 스크립트
                 bulk_html += """<script>window.onload = function() { setTimeout(function(){ window.print(); }, 800); };</script></body></html>"""
-                st.session_state['bulk_html_ready'] = base64.b64encode(bulk_html.encode('utf-8')).decode('utf-8')
-                st.success(f"✅ 총 {len(target_df)}건의 보고서가 준비되었습니다! 아래 파란색 버튼을 눌러 인쇄창을 띄우세요.")
+                st.session_state['bulk_html_ready'] = bulk_html.encode('utf-8')
+                st.success(f"✅ 총 {len(target_df)}건의 보고서가 준비되었습니다! 아래 버튼을 눌러 파일을 다운로드하세요.")
 
-    # 5. 생성된 데이터를 새 창(인쇄)으로 띄워주는 자바스크립트 버튼
+    # 💡 [팝업 차단 해결] 일괄 출력도 다운로드 버튼으로 변경
     if 'bulk_html_ready' in st.session_state:
-        b64_html = st.session_state['bulk_html_ready']
-        js_button = f"""
-        <button onclick="var b64='{b64_html}';var html=decodeURIComponent(escape(window.atob(b64)));var blob=new Blob([html], {{type: 'text/html;charset=utf-8'}});var url=URL.createObjectURL(blob);window.open(url, '_blank');" style="width:100%; height: 50px; background-color:#132B45; color:#FFC000; border:2px solid #FFC000; border-radius:8px; font-size:16px; font-weight:bold; cursor:pointer; margin-top: 10px;">
-        🖨️ {len(df) if print_target == "전체 출력" else print_target} 일괄 인쇄하기 (새창 열림)
-        </button>
-        """
-        components.html(js_button, height=65)
+        st.download_button(
+            label="📥 생성된 일괄 보고서 다운로드 (클릭하여 열기)",
+            data=st.session_state['bulk_html_ready'],
+            file_name="일괄_하자보고서.html",
+            mime="text/html",
+            type="primary",
+            use_container_width=True
+        )
 
 st.write("---")
 col1, col2 = st.columns([1, 1])
