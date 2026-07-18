@@ -10,7 +10,56 @@ import math
 import streamlit.components.v1 as components 
 
 # 페이지 기본 설정
-st.set_page_config(page_title="다운 2지구 지하주차장 하자 관리", layout="wide")
+st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
+
+# 💡 [디자인 업그레이드] 앱 전체의 색상과 폰트, 버튼 모양을 기업용으로 세련되게 꾸미는 CSS 코드
+st.markdown("""
+<style>
+    /* 메인 타이틀 박스 디자인 (우미건설 스타일 네이비 & 포인트 컬러) */
+    .title-container {
+        background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+        padding: 25px 20px;
+        border-radius: 12px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .main-title {
+        color: #FFFFFF;
+        font-size: 28px;
+        font-weight: 900;
+        margin: 0 0 8px 0;
+        letter-spacing: -0.5px;
+    }
+    .sub-title {
+        color: #FFC000;
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: 0.5px;
+    }
+    
+    /* 안내 문구 박스 */
+    .info-box {
+        background-color: #f8f9fa;
+        border-left: 4px solid #2196F3;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        color: #333;
+    }
+
+    /* 버튼 모서리를 둥글고 세련되게 */
+    div.stButton > button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    /* 토글 스위치 정렬 */
+    .stToggle { margin-top: 10px; }
+</style>
+""", unsafe_allow_html=True)
 
 # ==========================================
 # 🚨 [수정할 부분] 시트 주소만 다시 적어주세요! 
@@ -48,22 +97,18 @@ def upload_image_to_imgbb(file_bytes):
     except Exception as e:
         return f"ERROR: 코드 실행 오류 ({str(e)})"
 
-# 시트 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
 
-# 💡 [핵심 업데이트] photo_url_2 컬럼 초기화 처리
 if df.empty:
     df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2'])
 else:
     if 'photo_url' not in df.columns: df['photo_url'] = None
-    # 시트에 photo_url_2가 없으면 빈 컬럼 생성
     if 'photo_url_2' not in df.columns: df['photo_url_2'] = None
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 기타"]
 
-# --- 팝업창 (상세 정보, 수정 및 출력) ---
 @st.dialog("📋 하자 상세 정보 및 수정")
 def show_defect_details(row_idx, row_data, map_image):
     try:
@@ -74,7 +119,6 @@ def show_defect_details(row_idx, row_data, map_image):
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
     
-    # 💡 [업데이트] 상세 화면에서 사진 2장 표시
     col_img1, col_img2 = st.columns(2)
     p1_url = row_data.get('photo_url')
     p2_url = row_data.get('photo_url_2')
@@ -109,7 +153,6 @@ def show_defect_details(row_idx, row_data, map_image):
             st.success("조치 완료됨")
             
     with col3:
-        # 출력용 이미지 생성 (구름 마크 포함)
         print_img = map_image.copy()
         draw_print = ImageDraw.Draw(print_img)
         
@@ -130,7 +173,6 @@ def show_defect_details(row_idx, row_data, map_image):
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
-        # 💡 [업데이트] 보고서용 사진 HTML 생성 (사진 2장 나란히 배치)
         photo1_html = ""
         if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"):
             photo1_html = f'<img src="{p1_url}" />'
@@ -143,7 +185,6 @@ def show_defect_details(row_idx, row_data, map_image):
         else:
             photo2_html = '<div class="no-img">사진 2 없음</div>'
             
-        # 💡 [업데이트] A4 출력 레이아웃 개조 (사진 2장 좌우 배치, 그 아래 내용)
         report_html = f"""
         <!DOCTYPE html>
         <html lang="ko">
@@ -154,21 +195,13 @@ def show_defect_details(row_idx, row_data, map_image):
             @page {{ size: A4 portrait; margin: 10mm; }}
             body {{ font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 0; background: #eee;}}
             .page {{ width: 190mm; height: 277mm; margin: 0 auto; display: flex; flex-direction: column; background: white; padding: 5mm; box-sizing: border-box;}}
-            
-            /* 상단 도면 영역 (50%) */
             .top-map {{ height: 48%; border-bottom: 2px solid #333; padding-bottom: 3mm; margin-bottom: 5mm; text-align: center; overflow: hidden; }}
             .top-map img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
-            
-            /* 하단 정보 영역 (50%) */
             .bottom-info {{ height: 50%; display: flex; flex-direction: column; gap: 5mm; }}
-            
-            /* 하단 - 사진 2장 영역 (좌우 배치) */
             .photo-section {{ height: 60%; display: flex; gap: 5mm; }}
             .photo-box {{ width: 50%; height: 100%; text-align: center; border: 1px solid #ddd; padding: 2mm; box-sizing: border-box; display: flex; align-items: center; justify-content: center; overflow: hidden;}}
             .photo-box img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
             .no-img {{ color: #999; font-size: 14pt; }}
-
-            /* 하단 - 내용 영역 */
             .text-section {{ height: 38%; display: flex; flex-direction: column; gap: 3mm;}}
             .info-header {{ display: flex; gap: 5mm; align-items: center; }}
             .info-floor {{ font-size: 16pt; font-weight: bold; color: #555; }}
@@ -211,7 +244,7 @@ def show_defect_details(row_idx, row_data, map_image):
         
         b64_html = base64.b64encode(report_html.encode('utf-8')).decode('utf-8')
         js_button = f"""
-        <button onclick="printReport()" style="width:100%; height: 38px; background-color:#2196F3; color:white; border:none; border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer;">🖨️ A4 출력</button>
+        <button onclick="printReport()" style="width:100%; height: 38px; background-color:#1E3A8A; color:white; border:none; border-radius:5px; font-size:14px; font-weight:bold; cursor:pointer;">🖨️ A4 출력</button>
         <script>
         function printReport() {{
             var b64 = "{b64_html}";
@@ -224,7 +257,6 @@ def show_defect_details(row_idx, row_data, map_image):
         """
         components.html(js_button, height=45)
 
-# --- 팝업창 (신규 등록) ---
 @st.dialog("📝 신규 하자 등록")
 def register_defect(x, y, current_floor):
     st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
@@ -235,7 +267,6 @@ def register_defect(x, y, current_floor):
     st.write("---")
     st.subheader("🖼️ 사진 등록 (최대 2장)")
     
-    # 💡 [업데이트] 사진 1 입력 영역
     st.markdown("**[사진 1]**")
     upload_type1 = st.radio("사진 1 첨부 방식", ["🖼️ 선택", "📸 촬영"], horizontal=True, key="ut1")
     img_buffer1 = None
@@ -246,7 +277,6 @@ def register_defect(x, y, current_floor):
 
     st.write("---")
 
-    # 💡 [업데이트] 사진 2 입력 영역
     st.markdown("**[사진 2]**")
     upload_type2 = st.radio("사진 2 첨부 방식", ["🖼️ 선택", "📸 촬영"], horizontal=True, key="ut2")
     img_buffer2 = None
@@ -257,7 +287,6 @@ def register_defect(x, y, current_floor):
     
     if st.button("등록하기", type="primary", use_container_width=True):
         with st.spinner('안전한 이미지 서버로 데이터 전송 중...'):
-            # 💡 [업데이트] 두 사진 모두 업로드 처리
             photo_link1 = ""
             if img_buffer1 is not None:
                 photo_link1 = upload_image_to_imgbb(img_buffer1.getvalue())
@@ -272,7 +301,6 @@ def register_defect(x, y, current_floor):
                     st.error(f"🚨 사진 2 업로드 실패 원인: {photo_link2}")
                     st.stop()
             
-            # 💡 [업데이트] 데이터프레임에 두 링크 모두 저장
             new_data = pd.DataFrame([{
                 'id': len(df) + 1, 'floor': current_floor, 'x': x, 'y': y, 
                 'title': new_title, 'detail': new_detail, 'status': '처리중',
@@ -287,10 +315,26 @@ def register_defect(x, y, current_floor):
         st.rerun()
 
 # --- 메인 화면 ---
-st.title("🚧 다운 2지구 B2BL 지하주차장 하자 관리")
-selected_floor = st.radio("📍 도면 층수 선택", ["지하 1층", "지하 2층", "지하 3층"], horizontal=True)
-st.markdown("💡 **도면의 빈 곳을 터치**하면 하자가 등록되고, **마커를 터치**하면 조치 및 출력이 가능합니다.", unsafe_allow_html=True)
-hide_completed = st.toggle("✅ 완료된 하자(초록색) 숨기기", value=False)
+# 💡 [디자인 업그레이드] 텍스트 타이틀 대신 고급스러운 HTML 박스로 변경
+st.markdown("""
+    <div class="title-container">
+        <h1 class="main-title">🏢 우미건설 다운 2지구 B2BL 지하주차장</h1>
+        <div class="sub-title">모바일 도면 기반 통합 하자 관리 플랫폼</div>
+    </div>
+""", unsafe_allow_html=True)
+
+col1, col2 = st.columns([1, 1])
+with col1:
+    selected_floor = st.radio("📍 도면 층수 선택", ["지하 1층", "지하 2층", "지하 3층"], horizontal=True)
+with col2:
+    hide_completed = st.toggle("✅ 조치 완료(초록색) 마커 숨기기", value=False)
+
+st.markdown("""
+    <div class="info-box">
+        💡 <b>스마트폰 두 손가락</b>으로 도면을 자유롭게 확대/축소하세요.<br>
+        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
+    </div>
+""", unsafe_allow_html=True)
 
 floor_img_map = {
     "지하 1층": "basement_map_b1.jpg",
