@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import io
 import requests
 import base64
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont  # 💡 글꼴(Font) 조절 도구 추가
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 
@@ -59,17 +59,15 @@ else:
     if 'floor' not in df.columns:
         df['floor'] = '지하 1층'
 
-# 공종(하자명) 선택 리스트
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 기타"]
 
 # --- 팝업창 (상세 정보 및 수정) ---
 @st.dialog("📋 하자 상세 정보 및 수정")
 def show_defect_details(row_idx, row_data):
-    # 피드백 반영: 하자명 콤보박스로 변경 및 상세내용 -> 하자내용 변경
     try:
         current_idx = category_list.index(row_data['title'])
     except:
-        current_idx = 3 # 기본값: 기타
+        current_idx = 3 
         
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
@@ -103,7 +101,6 @@ def show_defect_details(row_idx, row_data):
 def register_defect(x, y, current_floor):
     st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
     
-    # 피드백 반영: 하자명 리스트 선택 및 라벨 변경
     new_title = st.selectbox("하자명", category_list)
     new_detail = st.text_area("하자내용")
     
@@ -139,11 +136,8 @@ def register_defect(x, y, current_floor):
 
 # --- 메인 화면 ---
 st.title("🚧 다운 2지구 B2BL 지하주차장 하자 관리")
-
 selected_floor = st.radio("📍 도면 층수 선택", ["지하 1층", "지하 2층", "지하 3층"], horizontal=True)
-
 st.markdown("💡 **도면의 빈 곳을 터치**하면 하자가 등록되고, **마커를 터치**하면 수정 및 완료 처리가 가능합니다.", unsafe_allow_html=True)
-
 hide_completed = st.toggle("✅ 완료된 하자(초록색) 숨기기", value=False)
 
 floor_img_map = {
@@ -158,8 +152,21 @@ except:
     base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
-# 피드백 반영: 마커 크기 6px로 대폭 축소
-marker_radius = 6 
+
+# 💡 피드백 반영: 마커 크기 8px로 조절
+marker_radius = 8 
+
+# 💡 피드백 반영: 글자 크기를 키우고 굵게(Bold) 설정하는 코드
+try:
+    # 스트림릿 서버에 있는 기본 굵은 글꼴 (크기 15)
+    bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 15)
+except:
+    try:
+        # PC 환경을 위한 맑은 고딕 굵게
+        bold_font = ImageFont.truetype("malgunbd.ttf", 15)
+    except:
+        # 폰트를 못 찾으면 기본 폰트 사용
+        bold_font = ImageFont.load_default()
 
 current_floor_df = df[df['floor'] == selected_floor]
 
@@ -170,7 +177,6 @@ for idx, row in current_floor_df.iterrows():
     try:
         x, y = float(row['x']), float(row['y'])
         
-        # 피드백 반영: 공종에 따른 색상 지정
         if row['status'] == '완료':
             color = "green"
         else:
@@ -178,26 +184,28 @@ for idx, row in current_floor_df.iterrows():
             elif row['title'] == '2. 소방': color = "red"
             elif row['title'] == '3. 자동제어': color = "yellow"
             elif row['title'] == '4. 기타': color = "purple"
-            else: color = "red" # 구 데이터 기본값
+            else: color = "red" 
             
-        # 마커(동그라미) 그리기
         draw.ellipse(
             (x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), 
             fill=color, outline="white", width=1
         )
         
-        # 피드백 반영: 마커 우측 상단에 순번(id) 표시 (흰색 그림자 효과 추가로 가독성 확보)
-        text_num = str(row['id'])
-        text_x = x + 8
-        text_y = y - 10
+        # 💡 피드백 반영: 소수점(1.0)을 무조건 정수(1)로 변환
+        text_num = str(int(row['id']))
         
-        # 배경색 대비 글자가 잘 보이도록 약간의 테두리 트릭
-        draw.text((text_x-1, text_y), text_num, fill="white")
-        draw.text((text_x+1, text_y), text_num, fill="white")
-        draw.text((text_x, text_y-1), text_num, fill="white")
-        draw.text((text_x, text_y+1), text_num, fill="white")
-        # 실제 숫자 검은색으로 그리기
-        draw.text((text_x, text_y), text_num, fill="black")
+        # 글씨가 커진 만큼 위치를 우측으로 조금 더 이동시킵니다.
+        text_x = x + 10
+        text_y = y - 12
+        
+        # 가독성을 위한 하얀색 테두리 효과
+        draw.text((text_x-1, text_y), text_num, fill="white", font=bold_font)
+        draw.text((text_x+1, text_y), text_num, fill="white", font=bold_font)
+        draw.text((text_x, text_y-1), text_num, fill="white", font=bold_font)
+        draw.text((text_x, text_y+1), text_num, fill="white", font=bold_font)
+        
+        # 실제 숫자 검은색 굵은 글씨로 출력
+        draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
         
     except:
         pass
@@ -218,7 +226,6 @@ if value is not None:
             try:
                 mx, my = float(row['x']), float(row['y'])
                 dist = math.sqrt((mx - clicked_x)**2 + (my - clicked_y)**2)
-                # 터치 인식 범위는 손가락 굵기를 고려해 조금 더 넓게 유지합니다 (약 20px 반경)
                 if dist <= 20.0: 
                     clicked_marker_idx = idx
                     clicked_marker_data = row
