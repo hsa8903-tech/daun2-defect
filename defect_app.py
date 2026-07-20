@@ -126,7 +126,9 @@ else:
 
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 기타"]
 
+# 💡 [핵심 반영] 지상층(배치도) 이미지 맵핑 추가
 floor_img_map = {
+    "지상층(배치도)": "ground_map.jpg",
     "지하 1층": "basement_map_b1.jpg",
     "지하 2층": "basement_map_b2.jpg",
     "지하 3층": "basement_map_b3.jpg"
@@ -233,7 +235,6 @@ def show_defect_details(row_idx, row_data, map_image):
         </body></html>
         """
         
-        # 💡 [팝업 차단 해결] 새 창 띄우기 대신 파일 다운로드 버튼으로 교체
         st.download_button(
             label="🖨️ A4 인쇄용 파일 다운",
             data=report_html.encode('utf-8'),
@@ -284,7 +285,7 @@ def register_defect(x, y, current_floor):
 # --- 메인 화면 ---
 st.markdown("""
     <div class="title-container">
-        <h1 class="main-title">🏢 우미건설 다운 2지구 B2BL 지하주차장</h1>
+        <h1 class="main-title">🏢 우미건설 다운 2지구 B2BL 지하주차장/지상층</h1>
         <div class="sub-title">모바일 도면 기반 통합 하자 관리 플랫폼</div>
     </div>
 """, unsafe_allow_html=True)
@@ -331,7 +332,7 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                 
                 for idx, row_data in target_df.iterrows():
                     try:
-                        base_map_print = Image.open(floor_img_map.get(row_data['floor'], "basement_map_b1.jpg")).copy()
+                        base_map_print = Image.open(floor_img_map.get(row_data['floor'], "ground_map.jpg")).copy()
                     except:
                         base_map_print = Image.new('RGB', (800, 600), color=(200, 200, 200))
                     
@@ -371,7 +372,6 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                 st.session_state['bulk_html_ready'] = bulk_html.encode('utf-8')
                 st.success(f"✅ 총 {len(target_df)}건의 보고서가 준비되었습니다! 아래 버튼을 눌러 파일을 다운로드하세요.")
 
-    # 💡 [팝업 차단 해결] 일괄 출력도 다운로드 버튼으로 변경
     if 'bulk_html_ready' in st.session_state:
         st.download_button(
             label="📥 생성된 일괄 보고서 다운로드 (클릭하여 열기)",
@@ -383,9 +383,10 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
         )
 
 st.write("---")
+# 💡 [핵심 반영] 도면 층수 선택 메뉴에 '지상층(배치도)' 추가
 col1, col2 = st.columns([1, 1])
 with col1:
-    selected_floor = st.radio("📍 도면 층수 선택", ["지하 1층", "지하 2층", "지하 3층"], horizontal=True)
+    selected_floor = st.radio("📍 도면 층수 선택", ["지상층(배치도)", "지하 1층", "지하 2층", "지하 3층"], horizontal=True)
 with col2:
     hide_completed = st.toggle("✅ 조치 완료(초록색) 마커 숨기기", value=False)
 
