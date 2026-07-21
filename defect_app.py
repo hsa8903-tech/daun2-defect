@@ -124,9 +124,9 @@ else:
     if 'photo_url_2' not in df.columns: df['photo_url_2'] = None
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
-category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 기타"]
+# 💡 [핵심 반영] 공종 리스트에 타 부서(전기, 통신, EV) 추가
+category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 전기", "5. 통신", "6. EV", "7. 기타"]
 
-# 💡 [핵심 반영] 지상층(배치도) 이미지 맵핑 추가
 floor_img_map = {
     "지상층(배치도)": "ground_map.jpg",
     "지하 1층": "basement_map_b1.jpg",
@@ -139,7 +139,7 @@ def show_defect_details(row_idx, row_data, map_image):
     try:
         current_idx = category_list.index(row_data['title'])
     except:
-        current_idx = 3 
+        current_idx = 6 # 기본값 7. 기타
         
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
@@ -383,7 +383,6 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
         )
 
 st.write("---")
-# 💡 [핵심 반영] 도면 층수 선택 메뉴에 '지상층(배치도)' 추가
 col1, col2 = st.columns([1, 1])
 with col1:
     selected_floor = st.radio("📍 도면 층수 선택", ["지상층(배치도)", "지하 1층", "지하 2층", "지하 3층"], horizontal=True)
@@ -422,10 +421,14 @@ for idx, row in current_floor_df.iterrows():
         
         if row['status'] == '완료': color = "green"
         else:
+            # 💡 [핵심 반영] 타 공종 추가 색상 맵핑
             if row['title'] == '1. 설비': color = "blue"
             elif row['title'] == '2. 소방': color = "red"
             elif row['title'] == '3. 자동제어': color = "#FFC000" 
-            elif row['title'] == '4. 기타': color = "purple"
+            elif row['title'] == '4. 전기': color = "#FF7F50" 
+            elif row['title'] == '5. 통신': color = "#00CED1" 
+            elif row['title'] == '6. EV': color = "#FF1493" 
+            elif row['title'] == '7. 기타': color = "purple"
             else: color = "red" 
             
         draw.ellipse((x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), fill=color, outline="white", width=1)
