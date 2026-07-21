@@ -124,7 +124,6 @@ else:
     if 'photo_url_2' not in df.columns: df['photo_url_2'] = None
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
-# 💡 [핵심 반영] 공종 리스트에 타 부서(전기, 통신, EV) 추가
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 전기", "5. 통신", "6. EV", "7. 기타"]
 
 floor_img_map = {
@@ -139,7 +138,7 @@ def show_defect_details(row_idx, row_data, map_image):
     try:
         current_idx = category_list.index(row_data['title'])
     except:
-        current_idx = 6 # 기본값 7. 기타
+        current_idx = 6 
         
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
@@ -150,19 +149,59 @@ def show_defect_details(row_idx, row_data, map_image):
 
     with col_img1:
         if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"):
-            st.image(p1_url, caption="사진 1", use_container_width=True)
+            st.image(p1_url, caption="현재 사진 1", use_container_width=True)
+        else:
+            st.info("등록된 사진 1 없음")
+            
     with col_img2:
         if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"):
-            st.image(p2_url, caption="사진 2", use_container_width=True)
+            st.image(p2_url, caption="현재 사진 2", use_container_width=True)
+        else:
+            st.info("등록된 사진 2 없음")
+            
+    # 💡 [핵심 반영] 사진 수정 메뉴 추가
+    with st.expander("🔄 사진 변경/추가하기 (선택사항)"):
+        st.caption("새로운 사진을 선택/촬영하시면 기존 사진을 덮어씁니다.")
+        st.markdown("**[새 사진 1]**")
+        edit_ut1 = st.radio("사진 1 변경 방식", ["유지", "🖼️ 선택", "📸 촬영"], horizontal=True, key=f"e_ut1_{row_idx}")
+        edit_img1 = None
+        if edit_ut1 == "🖼️ 선택":
+            edit_img1 = st.file_uploader("새 사진 1 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu1_{row_idx}")
+        elif edit_ut1 == "📸 촬영":
+            edit_img1 = st.camera_input("📸 새 사진 1 촬영", key=f"e_ci1_{row_idx}")
+
+        st.write("---")
+        st.markdown("**[새 사진 2]**")
+        edit_ut2 = st.radio("사진 2 변경 방식", ["유지", "🖼️ 선택", "📸 촬영"], horizontal=True, key=f"e_ut2_{row_idx}")
+        edit_img2 = None
+        if edit_ut2 == "🖼️ 선택":
+            edit_img2 = st.file_uploader("새 사진 2 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu2_{row_idx}")
+        elif edit_ut2 == "📸 촬영":
+            edit_img2 = st.camera_input("📸 새 사진 2 촬영", key=f"e_ci2_{row_idx}")
     
     st.write("---")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("💾 내용 수정", use_container_width=True):
-            df.at[row_idx, 'title'] = edit_title
-            df.at[row_idx, 'detail'] = edit_detail
-            conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=df)
+        # 💡 버튼 텍스트 변경 및 사진 업데이트 로직 연동
+        if st.button("💾 내용/사진 수정", use_container_width=True):
+            with st.spinner('수정된 데이터를 저장 중입니다...'):
+                new_p1_url = p1_url
+                if edit_ut1 != "유지" and edit_img1 is not None:
+                    res1 = upload_image_to_imgbb(edit_img1.getvalue())
+                    if not res1.startswith("ERROR"): new_p1_url = res1
+
+                new_p2_url = p2_url
+                if edit_ut2 != "유지" and edit_img2 is not None:
+                    res2 = upload_image_to_imgbb(edit_img2.getvalue())
+                    if not res2.startswith("ERROR"): new_p2_url = res2
+
+                df.at[row_idx, 'title'] = edit_title
+                df.at[row_idx, 'detail'] = edit_detail
+                df.at[row_idx, 'photo_url'] = new_p1_url
+                df.at[row_idx, 'photo_url_2'] = new_p2_url
+                
+                conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=df)
             st.session_state['last_click'] = None
             st.rerun()
             
@@ -421,7 +460,6 @@ for idx, row in current_floor_df.iterrows():
         
         if row['status'] == '완료': color = "green"
         else:
-            # 💡 [핵심 반영] 타 공종 추가 색상 맵핑
             if row['title'] == '1. 설비': color = "blue"
             elif row['title'] == '2. 소방': color = "red"
             elif row['title'] == '3. 자동제어': color = "#FFC000" 
