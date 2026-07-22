@@ -84,7 +84,7 @@ st.markdown("""
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 [핵심 반영] 전송 방식을 텍스트(Base64)가 아닌 다이렉트 파일 첨부(files)로 완벽 개선!
+# 💡 [핵심 반영] 아이폰 사진 111 에러 완벽 차단 로직 (메타데이터 날리기 + PNG 변환)
 def upload_image_to_imgbb(file_bytes):
     try:
         api_key = st.secrets["IMGBB_API_KEY"]
@@ -92,29 +92,34 @@ def upload_image_to_imgbb(file_bytes):
         return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
         
     try:
-        img = Image.open(io.BytesIO(file_bytes))
-        
+        # 1. 이미지 불러오기 및 회전 정보 적용
+        original_img = Image.open(io.BytesIO(file_bytes))
         try:
-            img = ImageOps.exif_transpose(img)
+            original_img = ImageOps.exif_transpose(original_img)
         except:
             pass
             
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-            
-        img.thumbnail((1024, 1024))
+        # 2. 이미지 서버(ImgBB)가 뱉어내는 원인인 'EXIF 메타데이터 및 아이폰 색상프로필' 완전 삭제
+        #    -> 아무 정보가 없는 깨끗한 새 RGB 도화지를 만들고 그 위에 픽셀만 복사합니다.
+        clean_img = Image.new("RGB", original_img.size)
+        clean_img.paste(original_img)
         
+        # 3. 크기 최적화 (서버 부하 감소)
+        clean_img.thumbnail((1024, 1024))
+        
+        # 4. 에러가 잦은 JPEG 대신 절대 실패하지 않는 PNG 포맷으로 변환하여 저장
         output_buffer = io.BytesIO()
-        img.save(output_buffer, format="JPEG", quality=85)
+        clean_img.save(output_buffer, format="PNG")
         upload_bytes = output_buffer.getvalue()
         
         url = "https://api.imgbb.com/1/upload"
+        payload = {
+            "key": api_key,
+            "image": base64.b64encode(upload_bytes).decode('utf-8')
+        }
         
-        # 데이터(문자)와 파일(사진)을 완벽하게 분리해서 전송합니다.
-        payload = {"key": api_key}
-        files = {"image": ("photo.jpg", upload_bytes, "image/jpeg")}
-        
-        response = requests.post(url, data=payload, files=files, timeout=15)
+        # 타임아웃을 넉넉히 20초로 늘려 통신 지연 에러 방지
+        response = requests.post(url, data=payload, timeout=20)
         
         if response.status_code == 200:
             return response.json()['data']['url']
@@ -307,7 +312,7 @@ def register_defect(x, y, current_floor):
     img_buffer2 = st.file_uploader("사진 2 선택", type=['jpg', 'jpeg', 'png'], key="fu2") if upload_type2 == "🖼️ 선택" else st.camera_input("📸 사진 2 촬영", key="ci2")
     
     if st.button("등록하기", type="primary", use_container_width=True):
-        with st.spinner('안전한 이미지 서버로 데이터 전송 중...'):
+        with st.spinner('안전한 이미지 서버로 데이터 전송 중... (5~10초 소요)'):
             photo_link1, photo_link2 = "", ""
             if img_buffer1:
                 photo_link1 = upload_image_to_imgbb(img_buffer1.getvalue())
