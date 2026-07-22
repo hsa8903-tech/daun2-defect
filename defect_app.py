@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import io
 import requests
 import base64
-from PIL import Image, ImageDraw, ImageFont 
+from PIL import Image, ImageDraw, ImageFont, ImageOps # 💡 [수정] 아이폰 사진 보정을 위해 ImageOps 추가
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 import streamlit.components.v1 as components 
@@ -84,6 +84,7 @@ st.markdown("""
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
+# 💡 [핵심 반영] 아이폰 사진 에러 방지를 위한 이미지 처리 로직 전면 개편
 def upload_image_to_imgbb(file_bytes):
     try:
         api_key = st.secrets["IMGBB_API_KEY"]
@@ -91,13 +92,22 @@ def upload_image_to_imgbb(file_bytes):
         return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
         
     try:
+        # 1. 이미지를 메모리로 불러옴
         img = Image.open(io.BytesIO(file_bytes))
+        
+        # 2. 아이폰(스마트폰) 사진의 고질적인 회전 및 메타데이터 오류 해결 (초기화)
+        img = ImageOps.exif_transpose(img)
+        
+        # 3. 투명 배경이나 특수 포맷을 안전한 RGB로 강제 변환
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
+            
+        # 4. 이미지 크기 최적화 (서버 부하 방지)
         img.thumbnail((1024, 1024))
         
+        # 5. ImgBB 서버가 거부하지 않도록 호환성 높은 JPEG로 재저장 (최적화 옵션 켬)
         output_buffer = io.BytesIO()
-        img.save(output_buffer, format="JPEG", quality=80)
+        img.save(output_buffer, format="JPEG", quality=85, optimize=True)
         upload_bytes = output_buffer.getvalue()
         
         url = "https://api.imgbb.com/1/upload"
@@ -105,7 +115,9 @@ def upload_image_to_imgbb(file_bytes):
             "key": api_key,
             "image": base64.b64encode(upload_bytes).decode('utf-8')
         }
-        response = requests.post(url, data=payload)
+        
+        # 6. 통신 지연으로 인한 에러 방지를 위해 제한시간(timeout) 15초 설정
+        response = requests.post(url, data=payload, timeout=15)
         
         if response.status_code == 200:
             return response.json()['data']['url']
@@ -159,7 +171,6 @@ def show_defect_details(row_idx, row_data, map_image):
         else:
             st.info("등록된 사진 2 없음")
             
-    # 💡 [핵심 반영] 사진 수정 메뉴 추가
     with st.expander("🔄 사진 변경/추가하기 (선택사항)"):
         st.caption("새로운 사진을 선택/촬영하시면 기존 사진을 덮어씁니다.")
         st.markdown("**[새 사진 1]**")
@@ -183,7 +194,6 @@ def show_defect_details(row_idx, row_data, map_image):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # 💡 버튼 텍스트 변경 및 사진 업데이트 로직 연동
         if st.button("💾 내용/사진 수정", use_container_width=True):
             with st.spinner('수정된 데이터를 저장 중입니다...'):
                 new_p1_url = p1_url
