@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 import io
 import requests
 import base64
-from PIL import Image, ImageDraw, ImageFont, ImageOps # 💡 [수정] 아이폰 사진 보정을 위해 ImageOps 추가
+from PIL import Image, ImageDraw, ImageFont, ImageOps 
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 import streamlit.components.v1 as components 
@@ -84,7 +84,7 @@ st.markdown("""
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 [핵심 반영] 아이폰 사진 에러 방지를 위한 이미지 처리 로직 전면 개편
+# 💡 [핵심 반영] 전송 방식을 텍스트(Base64)가 아닌 다이렉트 파일 첨부(files)로 완벽 개선!
 def upload_image_to_imgbb(file_bytes):
     try:
         api_key = st.secrets["IMGBB_API_KEY"]
@@ -92,32 +92,29 @@ def upload_image_to_imgbb(file_bytes):
         return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
         
     try:
-        # 1. 이미지를 메모리로 불러옴
         img = Image.open(io.BytesIO(file_bytes))
         
-        # 2. 아이폰(스마트폰) 사진의 고질적인 회전 및 메타데이터 오류 해결 (초기화)
-        img = ImageOps.exif_transpose(img)
-        
-        # 3. 투명 배경이나 특수 포맷을 안전한 RGB로 강제 변환
-        if img.mode in ("RGBA", "P"):
+        try:
+            img = ImageOps.exif_transpose(img)
+        except:
+            pass
+            
+        if img.mode != "RGB":
             img = img.convert("RGB")
             
-        # 4. 이미지 크기 최적화 (서버 부하 방지)
         img.thumbnail((1024, 1024))
         
-        # 5. ImgBB 서버가 거부하지 않도록 호환성 높은 JPEG로 재저장 (최적화 옵션 켬)
         output_buffer = io.BytesIO()
-        img.save(output_buffer, format="JPEG", quality=85, optimize=True)
+        img.save(output_buffer, format="JPEG", quality=85)
         upload_bytes = output_buffer.getvalue()
         
         url = "https://api.imgbb.com/1/upload"
-        payload = {
-            "key": api_key,
-            "image": base64.b64encode(upload_bytes).decode('utf-8')
-        }
         
-        # 6. 통신 지연으로 인한 에러 방지를 위해 제한시간(timeout) 15초 설정
-        response = requests.post(url, data=payload, timeout=15)
+        # 데이터(문자)와 파일(사진)을 완벽하게 분리해서 전송합니다.
+        payload = {"key": api_key}
+        files = {"image": ("photo.jpg", upload_bytes, "image/jpeg")}
+        
+        response = requests.post(url, data=payload, files=files, timeout=15)
         
         if response.status_code == 200:
             return response.json()['data']['url']
