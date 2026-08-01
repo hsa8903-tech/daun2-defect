@@ -141,7 +141,7 @@ else:
     if 'date' not in df.columns: df['date'] = ""
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
-# 💡 [업데이트] 건축팀 공종 리스트 대폭 추가 및 명칭 변경
+# 건축팀 공종 리스트 
 category_list = [
     "1. 골조", "2. 조적/미장", "3. 방수", "4. 도장", "5. 내장/수장", 
     "6. 창호", "7. 방화문", "8. AL", "9. 타일", "10. 준공청소", 
@@ -236,7 +236,8 @@ def show_defect_details(row_idx, row_data, map_image):
             draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
         except: pass
             
-        buffered = io.IO()
+        # 💡 [핵심 수정] io.IO() 오타를 io.BytesIO()로 올바르게 변경했습니다!
+        buffered = io.BytesIO()
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
@@ -496,19 +497,18 @@ for idx, row in current_floor_df.iterrows():
         x, y = float(row['x']), float(row['y'])
         if row['status'] == '완료': color = "green"
         else:
-            # 💡 [업데이트] 건축팀 공종별 마커 색상 지정
             if row['title'] == '1. 골조': color = "#A9A9A9" 
             elif row['title'] == '2. 조적/미장': color = "#8B4513" 
             elif row['title'] == '3. 방수': color = "#1E90FF" 
             elif row['title'] == '4. 도장': color = "#FF69B4" 
             elif row['title'] == '5. 내장/수장': color = "#9ACD32" 
             elif row['title'] == '6. 창호': color = "#4682B4" 
-            elif row['title'] == '7. 방화문': color = "#FF4500" # 강렬한 오렌지 레드
-            elif row['title'] == '8. AL': color = "#708090" # 슬레이트 그레이
-            elif row['title'] == '9. 타일': color = "#20B2AA" # 라이트 씨그린
-            elif row['title'] == '10. 준공청소': color = "#00FFFF" # 투명한 청록(시안)
-            elif row['title'] == '11. 사인몰': color = "#FFD700" # 골드
-            elif row['title'] == '12. 직영': color = "purple" # 보라색 유지
+            elif row['title'] == '7. 방화문': color = "#FF4500" 
+            elif row['title'] == '8. AL': color = "#708090" 
+            elif row['title'] == '9. 타일': color = "#20B2AA" 
+            elif row['title'] == '10. 준공청소': color = "#00FFFF" 
+            elif row['title'] == '11. 사인몰': color = "#FFD700" 
+            elif row['title'] == '12. 직영': color = "purple" 
             else: color = "red" 
             
         draw.ellipse((x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), fill=color, outline="white", width=1)
