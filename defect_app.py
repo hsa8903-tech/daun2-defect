@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 import streamlit.components.v1 as components 
+import datetime  # 💡 [핵심] 날짜(달력) 기능을 위해 추가된 모듈
 
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
@@ -84,7 +85,7 @@ st.markdown("""
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 [핵심 반영] 아이폰 사진 111 에러 완벽 차단 로직 (메타데이터 날리기 + PNG 변환)
+# 💡 [아이폰 에러 완벽 차단용 사진 전송 로직]
 def upload_image_to_imgbb(file_bytes):
     try:
         api_key = st.secrets["IMGBB_API_KEY"]
@@ -92,33 +93,21 @@ def upload_image_to_imgbb(file_bytes):
         return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
         
     try:
-        # 1. 이미지 불러오기 및 회전 정보 적용
         original_img = Image.open(io.BytesIO(file_bytes))
         try:
             original_img = ImageOps.exif_transpose(original_img)
-        except:
-            pass
+        except: pass
             
-        # 2. 이미지 서버(ImgBB)가 뱉어내는 원인인 'EXIF 메타데이터 및 아이폰 색상프로필' 완전 삭제
-        #    -> 아무 정보가 없는 깨끗한 새 RGB 도화지를 만들고 그 위에 픽셀만 복사합니다.
         clean_img = Image.new("RGB", original_img.size)
         clean_img.paste(original_img)
-        
-        # 3. 크기 최적화 (서버 부하 감소)
         clean_img.thumbnail((1024, 1024))
         
-        # 4. 에러가 잦은 JPEG 대신 절대 실패하지 않는 PNG 포맷으로 변환하여 저장
         output_buffer = io.BytesIO()
         clean_img.save(output_buffer, format="PNG")
         upload_bytes = output_buffer.getvalue()
         
         url = "https://api.imgbb.com/1/upload"
-        payload = {
-            "key": api_key,
-            "image": base64.b64encode(upload_bytes).decode('utf-8')
-        }
-        
-        # 타임아웃을 넉넉히 20초로 늘려 통신 지연 에러 방지
+        payload = {"key": api_key, "image": base64.b64encode(upload_bytes).decode('utf-8')}
         response = requests.post(url, data=payload, timeout=20)
         
         if response.status_code == 200:
@@ -131,11 +120,13 @@ def upload_image_to_imgbb(file_bytes):
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
 
+# 💡 [데이터 초기화 및 날짜 열(date) 자동 반영]
 if df.empty:
-    df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2'])
+    df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2', 'date'])
 else:
     if 'photo_url' not in df.columns: df['photo_url'] = None
     if 'photo_url_2' not in df.columns: df['photo_url_2'] = None
+    if 'date' not in df.columns: df['date'] = ""
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 전기", "5. 통신", "6. EV", "7. 기타"]
@@ -149,48 +140,40 @@ floor_img_map = {
 
 @st.dialog("📋 하자 상세 정보 및 수정")
 def show_defect_details(row_idx, row_data, map_image):
-    try:
-        current_idx = category_list.index(row_data['title'])
-    except:
-        current_idx = 6 
+    try: current_idx = category_list.index(row_data['title'])
+    except: current_idx = 6 
         
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
     
+    # 💡 기존 등록일자 가져오기 (없으면 오늘 날짜)
+    existing_date_str = str(row_data.get('date', ''))
+    try: existing_date = datetime.datetime.strptime(existing_date_str, "%Y-%m-%d").date()
+    except: existing_date = datetime.date.today()
+    
+    # 💡 접수일자 수정용 달력
+    edit_date = st.date_input("📅 접수 일자", existing_date)
+    
     col_img1, col_img2 = st.columns(2)
-    p1_url = row_data.get('photo_url')
-    p2_url = row_data.get('photo_url_2')
+    p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
 
     with col_img1:
-        if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"):
-            st.image(p1_url, caption="현재 사진 1", use_container_width=True)
-        else:
-            st.info("등록된 사진 1 없음")
-            
+        if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
+        else: st.info("등록된 사진 1 없음")
     with col_img2:
-        if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"):
-            st.image(p2_url, caption="현재 사진 2", use_container_width=True)
-        else:
-            st.info("등록된 사진 2 없음")
+        if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
+        else: st.info("등록된 사진 2 없음")
             
     with st.expander("🔄 사진 변경/추가하기 (선택사항)"):
         st.caption("새로운 사진을 선택/촬영하시면 기존 사진을 덮어씁니다.")
         st.markdown("**[새 사진 1]**")
         edit_ut1 = st.radio("사진 1 변경 방식", ["유지", "🖼️ 선택", "📸 촬영"], horizontal=True, key=f"e_ut1_{row_idx}")
-        edit_img1 = None
-        if edit_ut1 == "🖼️ 선택":
-            edit_img1 = st.file_uploader("새 사진 1 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu1_{row_idx}")
-        elif edit_ut1 == "📸 촬영":
-            edit_img1 = st.camera_input("📸 새 사진 1 촬영", key=f"e_ci1_{row_idx}")
+        edit_img1 = st.file_uploader("새 사진 1 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu1_{row_idx}") if edit_ut1 == "🖼️ 선택" else st.camera_input("📸 새 사진 1 촬영", key=f"e_ci1_{row_idx}") if edit_ut1 == "📸 촬영" else None
 
         st.write("---")
         st.markdown("**[새 사진 2]**")
         edit_ut2 = st.radio("사진 2 변경 방식", ["유지", "🖼️ 선택", "📸 촬영"], horizontal=True, key=f"e_ut2_{row_idx}")
-        edit_img2 = None
-        if edit_ut2 == "🖼️ 선택":
-            edit_img2 = st.file_uploader("새 사진 2 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu2_{row_idx}")
-        elif edit_ut2 == "📸 촬영":
-            edit_img2 = st.camera_input("📸 새 사진 2 촬영", key=f"e_ci2_{row_idx}")
+        edit_img2 = st.file_uploader("새 사진 2 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu2_{row_idx}") if edit_ut2 == "🖼️ 선택" else st.camera_input("📸 새 사진 2 촬영", key=f"e_ci2_{row_idx}") if edit_ut2 == "📸 촬영" else None
     
     st.write("---")
     col1, col2, col3 = st.columns(3)
@@ -198,18 +181,17 @@ def show_defect_details(row_idx, row_data, map_image):
     with col1:
         if st.button("💾 내용/사진 수정", use_container_width=True):
             with st.spinner('수정된 데이터를 저장 중입니다...'):
-                new_p1_url = p1_url
-                if edit_ut1 != "유지" and edit_img1 is not None:
+                new_p1_url, new_p2_url = p1_url, p2_url
+                if edit_ut1 != "유지" and edit_img1:
                     res1 = upload_image_to_imgbb(edit_img1.getvalue())
                     if not res1.startswith("ERROR"): new_p1_url = res1
-
-                new_p2_url = p2_url
-                if edit_ut2 != "유지" and edit_img2 is not None:
+                if edit_ut2 != "유지" and edit_img2:
                     res2 = upload_image_to_imgbb(edit_img2.getvalue())
                     if not res2.startswith("ERROR"): new_p2_url = res2
 
                 df.at[row_idx, 'title'] = edit_title
                 df.at[row_idx, 'detail'] = edit_detail
+                df.at[row_idx, 'date'] = edit_date.strftime("%Y-%m-%d") # 💡 날짜 저장
                 df.at[row_idx, 'photo_url'] = new_p1_url
                 df.at[row_idx, 'photo_url_2'] = new_p2_url
                 
@@ -232,12 +214,10 @@ def show_defect_details(row_idx, row_data, map_image):
         draw_print = ImageDraw.Draw(print_img)
         try:
             tx, ty = float(row_data['x']), float(row_data['y'])
-            cloud_radius, bump_radius = 35, 15   
             for angle in range(0, 360, 45):
                 rad = math.radians(angle)
-                cx = tx + cloud_radius * math.cos(rad)
-                cy = ty + cloud_radius * math.sin(rad)
-                draw_print.ellipse((cx - bump_radius, cy - bump_radius, cx + bump_radius, cy + bump_radius), outline="red", width=4)
+                cx, cy = tx + 35 * math.cos(rad), ty + 35 * math.sin(rad)
+                draw_print.ellipse((cx - 15, cy - 15, cx + 15, cy + 15), outline="red", width=4)
             draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
         except: pass
             
@@ -247,6 +227,10 @@ def show_defect_details(row_idx, row_data, map_image):
         
         photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
         photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
+        
+        # 💡 HTML 리포트에 접수일자 표기 추가
+        display_date = row_data.get('date', '')
+        if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
             
         report_html = f"""
         <!DOCTYPE html>
@@ -264,9 +248,10 @@ def show_defect_details(row_idx, row_data, map_image):
             .photo-box img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
             .no-img {{ color: #999; font-size: 14pt; }}
             .text-section {{ height: 38%; display: flex; flex-direction: column; gap: 3mm;}}
-            .info-header {{ display: flex; gap: 5mm; align-items: center; }}
+            .info-header {{ display: flex; gap: 2mm; align-items: center; }}
             .info-floor {{ font-size: 16pt; font-weight: bold; color: #555; }}
-            .info-title {{ flex-grow: 1; font-size: 18pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; }}
+            .info-title {{ flex-grow: 1; font-size: 17pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; display: flex; align-items: center; justify-content: space-between;}}
+            .info-date {{ font-size: 12pt; font-weight: normal; color: #666; }}
             .info-detail-box {{ border: 1px solid #ccc; border-radius: 4px; padding: 10px; height: 100%; overflow: hidden; }}
             .info-detail-label {{ font-size: 14pt; font-weight: bold; color: #333; margin-bottom: 5px; display: block;}}
             .info-detail-content {{ font-size: 15pt; line-height: 1.5; white-space: pre-wrap; color: #444; }}
@@ -277,7 +262,13 @@ def show_defect_details(row_idx, row_data, map_image):
                 <div class="bottom-info">
                     <div class="photo-section"><div class="photo-box">{photo1_html}</div><div class="photo-box">{photo2_html}</div></div>
                     <div class="text-section">
-                        <div class="info-header"><div class="info-floor">[{row_data['floor']}]</div><div class="info-title">공종: {row_data['title']} (No.{int(row_data['id'])})</div></div>
+                        <div class="info-header">
+                            <div class="info-floor">[{row_data['floor']}]</div>
+                            <div class="info-title">
+                                <span>공종: {row_data['title']} (No.{int(row_data['id'])})</span>
+                                <span class="info-date">(접수일: {display_date})</span>
+                            </div>
+                        </div>
                         <div class="info-detail-box"><span class="info-detail-label">■ 하자내용</span><div class="info-detail-content">{row_data['detail']}</div></div>
                     </div>
                 </div>
@@ -288,15 +279,16 @@ def show_defect_details(row_idx, row_data, map_image):
         
         st.download_button(
             label="🖨️ A4 인쇄용 파일 다운",
-            data=report_html.encode('utf-8'),
-            file_name=f"하자보고서_No{int(row_data['id'])}.html",
-            mime="text/html",
-            use_container_width=True
+            data=report_html.encode('utf-8'), file_name=f"하자보고서_No{int(row_data['id'])}.html", mime="text/html", use_container_width=True
         )
 
 @st.dialog("📝 신규 하자 등록")
 def register_defect(x, y, current_floor):
     st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
+    
+    # 💡 신규 등록 시 달력 추가 (기본값: 오늘)
+    new_date = st.date_input("📅 접수 일자", datetime.date.today())
+    
     new_title = st.selectbox("하자명", category_list)
     new_detail = st.text_area("하자내용")
     
@@ -312,7 +304,7 @@ def register_defect(x, y, current_floor):
     img_buffer2 = st.file_uploader("사진 2 선택", type=['jpg', 'jpeg', 'png'], key="fu2") if upload_type2 == "🖼️ 선택" else st.camera_input("📸 사진 2 촬영", key="ci2")
     
     if st.button("등록하기", type="primary", use_container_width=True):
-        with st.spinner('안전한 이미지 서버로 데이터 전송 중... (5~10초 소요)'):
+        with st.spinner('안전한 이미지 서버로 데이터 전송 중...'):
             photo_link1, photo_link2 = "", ""
             if img_buffer1:
                 photo_link1 = upload_image_to_imgbb(img_buffer1.getvalue())
@@ -324,7 +316,8 @@ def register_defect(x, y, current_floor):
             new_data = pd.DataFrame([{
                 'id': len(df) + 1, 'floor': current_floor, 'x': x, 'y': y, 
                 'title': new_title, 'detail': new_detail, 'status': '처리중',
-                'photo_url': photo_link1, 'photo_url_2': photo_link2
+                'photo_url': photo_link1, 'photo_url_2': photo_link2,
+                'date': new_date.strftime("%Y-%m-%d") # 💡 DB에 날짜 저장
             }])
             updated_df = pd.concat([df, new_data], ignore_index=True)
             conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=updated_df)
@@ -342,19 +335,40 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 설비팀</div>', unsafe_allow_html=True)
 
-with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
-    st.info("선택한 공종의 데이터를 출력용 HTML 파일로 저장합니다. 다운로드 후 파일을 터치하면 인쇄 화면이 뜹니다.")
-    print_target = st.selectbox("출력할 공종을 선택하세요", ["전체 출력"] + category_list)
+# 💡 [업그레이드] 일괄 출력 기능에 공종 + 달력 필터링 화면 배치
+with st.expander("🖨️ 공종 및 날짜별 보고서 일괄 출력 (모아찍기)"):
+    st.info("원하는 공종과 날짜를 지정하여 조건에 맞는 데이터를 A4 인쇄용으로 뽑아냅니다.")
+    
+    # 두 칸으로 나누어 좌측은 공종 선택, 우측은 날짜 선택 기능 배치
+    col_print1, col_print2 = st.columns(2)
+    with col_print1:
+        print_target = st.selectbox("출력할 공종을 선택하세요", ["전체 출력"] + category_list)
+    with col_print2:
+        use_date_filter = st.checkbox("📅 특정 날짜만 출력하기")
+        if use_date_filter:
+            print_date = st.date_input("출력할 날짜를 달력에서 선택하세요", datetime.date.today())
+        else:
+            print_date = None
+            
     print_hide_completed = st.checkbox("✅ 완료된 하자(초록색)는 제외하고 출력하기", value=True)
     
-    if st.button("🚀 일괄 보고서 생성 시작 (클릭)", type="primary"):
-        with st.spinner("출력용 데이터를 생성 중입니다... (데이터가 많을 경우 5~10초 소요)"):
+    if st.button("🚀 조건에 맞는 보고서 생성 시작", type="primary"):
+        with st.spinner("출력용 데이터를 수집 및 생성 중입니다... (5~10초 소요)"):
+            
+            # 💡 [필터링 1] 공종 필터
             target_df = df if print_target == "전체 출력" else df[df['title'] == print_target]
+            
+            # 💡 [필터링 2] 날짜 필터 적용
+            if use_date_filter and print_date is not None:
+                date_str = print_date.strftime("%Y-%m-%d")
+                target_df = target_df[target_df['date'] == date_str]
+                
+            # 💡 [필터링 3] 완료된 항목 숨기기
             if print_hide_completed:
                 target_df = target_df[target_df['status'] != '완료']
             
             if target_df.empty:
-                st.warning("출력할 데이터가 없습니다.")
+                st.warning("선택하신 조건(공종, 날짜)에 해당하는 하자가 없습니다.")
             else:
                 bulk_html = """
                 <!DOCTYPE html>
@@ -372,9 +386,10 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                     .photo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
                     .no-img { color: #999; font-size: 14pt; }
                     .text-section { height: 38%; display: flex; flex-direction: column; gap: 3mm;}
-                    .info-header { display: flex; gap: 5mm; align-items: center; }
+                    .info-header { display: flex; gap: 2mm; align-items: center; }
                     .info-floor { font-size: 16pt; font-weight: bold; color: #555; }
-                    .info-title { flex-grow: 1; font-size: 18pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; }
+                    .info-title { flex-grow: 1; font-size: 17pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; display: flex; align-items: center; justify-content: space-between;}
+                    .info-date { font-size: 12pt; font-weight: normal; color: #666; }
                     .info-detail-box { border: 1px solid #ccc; border-radius: 4px; padding: 10px; height: 100%; overflow: hidden; }
                     .info-detail-label { font-size: 14pt; font-weight: bold; color: #333; margin-bottom: 5px; display: block;}
                     .info-detail-content { font-size: 15pt; line-height: 1.5; white-space: pre-wrap; color: #444; }
@@ -382,18 +397,15 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                 """
                 
                 for idx, row_data in target_df.iterrows():
-                    try:
-                        base_map_print = Image.open(floor_img_map.get(row_data['floor'], "ground_map.jpg")).copy()
-                    except:
-                        base_map_print = Image.new('RGB', (800, 600), color=(200, 200, 200))
+                    try: base_map_print = Image.open(floor_img_map.get(row_data['floor'], "ground_map.jpg")).copy()
+                    except: base_map_print = Image.new('RGB', (800, 600), color=(200, 200, 200))
                     
                     draw_print = ImageDraw.Draw(base_map_print)
                     try:
                         tx, ty = float(row_data['x']), float(row_data['y'])
                         for angle in range(0, 360, 45):
                             rad = math.radians(angle)
-                            cx = tx + 35 * math.cos(rad)
-                            cy = ty + 35 * math.sin(rad)
+                            cx, cy = tx + 35 * math.cos(rad), ty + 35 * math.sin(rad)
                             draw_print.ellipse((cx - 15, cy - 15, cx + 15, cy + 15), outline="red", width=4)
                         draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
                     except: pass
@@ -406,13 +418,22 @@ with st.expander("🖨️ 공종별 보고서 일괄 출력 (모아찍기)"):
                     photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
                     photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
                     
+                    display_date = row_data.get('date', '')
+                    if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
+                    
                     bulk_html += f"""
                     <div class="page">
                         <div class="top-map"><img src="data:image/jpeg;base64,{map_b64}" alt="도면"></div>
                         <div class="bottom-info">
                             <div class="photo-section"><div class="photo-box">{photo1_html}</div><div class="photo-box">{photo2_html}</div></div>
                             <div class="text-section">
-                                <div class="info-header"><div class="info-floor">[{row_data['floor']}]</div><div class="info-title">공종: {row_data['title']} (No.{int(row_data['id'])})</div></div>
+                                <div class="info-header">
+                                    <div class="info-floor">[{row_data['floor']}]</div>
+                                    <div class="info-title">
+                                        <span>공종: {row_data['title']} (No.{int(row_data['id'])})</span>
+                                        <span class="info-date">(접수일: {display_date})</span>
+                                    </div>
+                                </div>
                                 <div class="info-detail-box"><span class="info-detail-label">■ 하자내용</span><div class="info-detail-content">{row_data['detail']}</div></div>
                             </div>
                         </div>
@@ -455,13 +476,10 @@ except:
 draw = ImageDraw.Draw(base_img)
 marker_radius = 8 
 
-try:
-    bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
+try: bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
 except:
-    try:
-        bold_font = ImageFont.truetype("malgunbd.ttf", 18)
-    except:
-        bold_font = ImageFont.load_default()
+    try: bold_font = ImageFont.truetype("malgunbd.ttf", 18)
+    except: bold_font = ImageFont.load_default()
 
 current_floor_df = df[df['floor'] == selected_floor]
 
@@ -469,7 +487,6 @@ for idx, row in current_floor_df.iterrows():
     if hide_completed and row['status'] == '완료': continue
     try:
         x, y = float(row['x']), float(row['y'])
-        
         if row['status'] == '완료': color = "green"
         else:
             if row['title'] == '1. 설비': color = "blue"
@@ -482,7 +499,6 @@ for idx, row in current_floor_df.iterrows():
             else: color = "red" 
             
         draw.ellipse((x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), fill=color, outline="white", width=1)
-        
         text_num = str(int(row['id']))
         text_x, text_y = x + 12, y - 15
         
@@ -498,7 +514,6 @@ value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
 if value is not None:
     if 'last_click' not in st.session_state or st.session_state['last_click'] != value:
         st.session_state['last_click'] = value
-        
         clicked_x, clicked_y = value['x'], value['y']
         clicked_marker_idx, clicked_marker_data = None, None
         
