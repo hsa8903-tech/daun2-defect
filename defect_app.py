@@ -13,14 +13,44 @@ import datetime
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
 
-# [모바일 확대/축소 강제 허용 스크립트]
+# 💡 [핵심 반영] 모바일 확대/축소 허용 및 '달력 실시간 한글 번역' 스크립트
 components.html(
     """
     <script>
+    // 1. 모바일 화면 확대 강제 허용
     const parentMeta = window.parent.document.querySelector('meta[name="viewport"]');
     if (parentMeta) {
         parentMeta.content = "width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes";
     }
+
+    // 2. 달력 영어 -> 한글 실시간 번역 스크립트
+    const parentDoc = window.parent.document;
+    const observer = new MutationObserver(() => {
+        const calendars = parentDoc.querySelectorAll('[data-baseweb="calendar"]');
+        calendars.forEach(calendar => {
+            const elements = calendar.querySelectorAll('*');
+            elements.forEach(el => {
+                if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+                    let text = el.textContent.trim();
+                    
+                    // 요일 번역
+                    const days = {'Su': '일', 'Mo': '월', 'Tu': '화', 'We': '수', 'Th': '목', 'Fr': '금', 'Sa': '토'};
+                    if (days[text]) { el.textContent = days[text]; return; }
+                    
+                    // 월 단독 번역 (드롭다운 메뉴용)
+                    const monthMap = {'January': '1월', 'February': '2월', 'March': '3월', 'April': '4월', 'May': '5월', 'June': '6월', 'July': '7월', 'August': '8월', 'September': '9월', 'October': '10월', 'November': '11월', 'December': '12월'};
+                    if (monthMap[text]) { el.textContent = monthMap[text]; return; }
+                    
+                    // 연도-월 조합 번역 (예: August 2026 -> 2026년 8월)
+                    const monthMatch = text.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+([0-9]{4})$/i);
+                    if (monthMatch) {
+                        el.textContent = monthMatch[2] + '년 ' + monthMap[monthMatch[1]];
+                    }
+                }
+            });
+        });
+    });
+    observer.observe(parentDoc.body, {childList: true, subtree: true});
     </script>
     """,
     height=0
@@ -120,7 +150,6 @@ def upload_image_to_imgbb(file_bytes):
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
 
-# [데이터 초기화 및 날짜 열(date) 자동 반영]
 if df.empty:
     df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2', 'date'])
 else:
@@ -146,12 +175,12 @@ def show_defect_details(row_idx, row_data, map_image):
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
     
-    # 💡 단일 하자 수정 시에는 정확한 '특정 날짜' 하루만 지정
     existing_date_str = str(row_data.get('date', ''))
     try: existing_date = datetime.datetime.strptime(existing_date_str, "%Y-%m-%d").date()
     except: existing_date = datetime.date.today()
     
-    edit_date = st.date_input("📅 접수 일자", existing_date)
+    # 💡 [포맷 수정] YYYY-MM-DD 형태로 고정
+    edit_date = st.date_input("📅 접수 일자", existing_date, format="YYYY-MM-DD")
     
     col_img1, col_img2 = st.columns(2)
     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
@@ -284,7 +313,8 @@ def show_defect_details(row_idx, row_data, map_image):
 def register_defect(x, y, current_floor):
     st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
     
-    new_date = st.date_input("📅 접수 일자", datetime.date.today())
+    # 💡 [포맷 수정] YYYY-MM-DD 형태로 고정
+    new_date = st.date_input("📅 접수 일자", datetime.date.today(), format="YYYY-MM-DD")
     
     new_title = st.selectbox("하자명", category_list)
     new_detail = st.text_area("하자내용")
@@ -332,7 +362,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 설비팀</div>', unsafe_allow_html=True)
 
-# 💡 [업그레이드] 일괄 출력 기능에 '기간 설정(Range)' 달력 필터 적용
 with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아찍기)"):
     st.info("원하는 공종과 조회 기간을 지정하여 데이터만 쏙 뽑아냅니다. 달력에서 '시작일'과 '종료일'을 선택하세요.")
     
@@ -342,9 +371,9 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
     with col_print2:
         use_date_filter = st.checkbox("📅 특정 기간만 출력하기")
         if use_date_filter:
-            # 💡 값이 2개 들어가는 리스트를 주면 Streamlit이 자동으로 '기간(Range) 선택' 달력으로 변신시킵니다.
             today = datetime.date.today()
-            print_date_range = st.date_input("출력할 기간(시작~종료) 선택", value=[today, today])
+            # 💡 [포맷 수정] YYYY-MM-DD 형태로 고정
+            print_date_range = st.date_input("출력할 기간(시작~종료) 선택", value=[today, today], format="YYYY-MM-DD")
         else:
             print_date_range = None
             
@@ -355,18 +384,15 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
             
             target_df = df if print_target == "전체 출력" else df[df['title'] == print_target]
             
-            # 💡 [필터링 핵심] 시작일과 종료일 사이의 데이터만 골라내기
             if use_date_filter and print_date_range is not None:
-                # 사용자가 달력에서 날짜를 1개만 찍었을 때와 2개 모두 찍었을 때를 구분하여 방어
                 if len(print_date_range) == 2:
                     start_str = print_date_range[0].strftime("%Y-%m-%d")
                     end_str = print_date_range[1].strftime("%Y-%m-%d")
                 elif len(print_date_range) == 1:
                     start_str = end_str = print_date_range[0].strftime("%Y-%m-%d")
                 else:
-                    start_str = end_str = "9999-12-31" # 에러 방지
+                    start_str = end_str = "9999-12-31" 
                 
-                # 데이터 프레임 내의 문자열(YYYY-MM-DD) 날짜 크기 비교
                 def is_in_range(d_str):
                     if pd.isna(d_str) or str(d_str).strip() == "": return False
                     return start_str <= str(d_str) <= end_str
