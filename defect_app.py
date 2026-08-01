@@ -13,17 +13,14 @@ import datetime
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
 
-# 💡 [핵심 반영] 모바일 확대/축소 허용 및 '달력 실시간 한글 번역' 스크립트
 components.html(
     """
     <script>
-    // 1. 모바일 화면 확대 강제 허용
     const parentMeta = window.parent.document.querySelector('meta[name="viewport"]');
     if (parentMeta) {
         parentMeta.content = "width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes";
     }
 
-    // 2. 달력 영어 -> 한글 실시간 번역 스크립트
     const parentDoc = window.parent.document;
     const observer = new MutationObserver(() => {
         const calendars = parentDoc.querySelectorAll('[data-baseweb="calendar"]');
@@ -32,16 +29,10 @@ components.html(
             elements.forEach(el => {
                 if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
                     let text = el.textContent.trim();
-                    
-                    // 요일 번역
                     const days = {'Su': '일', 'Mo': '월', 'Tu': '화', 'We': '수', 'Th': '목', 'Fr': '금', 'Sa': '토'};
                     if (days[text]) { el.textContent = days[text]; return; }
-                    
-                    // 월 단독 번역 (드롭다운 메뉴용)
                     const monthMap = {'January': '1월', 'February': '2월', 'March': '3월', 'April': '4월', 'May': '5월', 'June': '6월', 'July': '7월', 'August': '8월', 'September': '9월', 'October': '10월', 'November': '11월', 'December': '12월'};
                     if (monthMap[text]) { el.textContent = monthMap[text]; return; }
-                    
-                    // 연도-월 조합 번역 (예: August 2026 -> 2026년 8월)
                     const monthMatch = text.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+([0-9]{4})$/i);
                     if (monthMatch) {
                         el.textContent = monthMatch[2] + '년 ' + monthMap[monthMatch[1]];
@@ -56,7 +47,6 @@ components.html(
     height=0
 )
 
-# [디자인 스타일 적용]
 st.markdown("""
 <style>
     .title-container {
@@ -110,22 +100,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🚨 [수정할 부분] 시트 주소만 다시 적어주세요! 
+# 🚨 [수정할 부분] 설비팀 시트 주소 확인!
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# [아이폰 에러 완벽 차단용 사진 전송 로직]
 def upload_image_to_imgbb(file_bytes):
-    try:
-        api_key = st.secrets["IMGBB_API_KEY"]
-    except:
-        return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
+    try: api_key = st.secrets["IMGBB_API_KEY"]
+    except: return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
         
     try:
         original_img = Image.open(io.BytesIO(file_bytes))
-        try:
-            original_img = ImageOps.exif_transpose(original_img)
+        try: original_img = ImageOps.exif_transpose(original_img)
         except: pass
             
         clean_img = Image.new("RGB", original_img.size)
@@ -140,12 +126,9 @@ def upload_image_to_imgbb(file_bytes):
         payload = {"key": api_key, "image": base64.b64encode(upload_bytes).decode('utf-8')}
         response = requests.post(url, data=payload, timeout=20)
         
-        if response.status_code == 200:
-            return response.json()['data']['url']
-        else:
-            return f"ERROR: 서버 거절 사유 ({response.text})"
-    except Exception as e:
-        return f"ERROR: 코드 실행 오류 ({str(e)})"
+        if response.status_code == 200: return response.json()['data']['url']
+        else: return f"ERROR: 서버 거절 사유 ({response.text})"
+    except Exception as e: return f"ERROR: 코드 실행 오류 ({str(e)})"
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
@@ -158,6 +141,7 @@ else:
     if 'date' not in df.columns: df['date'] = ""
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
+# 설비팀 공종 리스트
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 전기", "5. 통신", "6. EV", "7. 기타"]
 
 floor_img_map = {
@@ -179,7 +163,6 @@ def show_defect_details(row_idx, row_data, map_image):
     try: existing_date = datetime.datetime.strptime(existing_date_str, "%Y-%m-%d").date()
     except: existing_date = datetime.date.today()
     
-    # 💡 [포맷 수정] YYYY-MM-DD 형태로 고정
     edit_date = st.date_input("📅 접수 일자", existing_date, format="YYYY-MM-DD")
     
     col_img1, col_img2 = st.columns(2)
@@ -312,10 +295,7 @@ def show_defect_details(row_idx, row_data, map_image):
 @st.dialog("📝 신규 하자 등록")
 def register_defect(x, y, current_floor):
     st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
-    
-    # 💡 [포맷 수정] YYYY-MM-DD 형태로 고정
     new_date = st.date_input("📅 접수 일자", datetime.date.today(), format="YYYY-MM-DD")
-    
     new_title = st.selectbox("하자명", category_list)
     new_detail = st.text_area("하자내용")
     
@@ -372,10 +352,8 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
         use_date_filter = st.checkbox("📅 특정 기간만 출력하기")
         if use_date_filter:
             today = datetime.date.today()
-            # 💡 [포맷 수정] YYYY-MM-DD 형태로 고정
             print_date_range = st.date_input("출력할 기간(시작~종료) 선택", value=[today, today], format="YYYY-MM-DD")
-        else:
-            print_date_range = None
+        else: print_date_range = None
             
     print_hide_completed = st.checkbox("✅ 완료된 하자(초록색)는 제외하고 출력하기", value=True)
     
@@ -386,12 +364,10 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
             
             if use_date_filter and print_date_range is not None:
                 if len(print_date_range) == 2:
-                    start_str = print_date_range[0].strftime("%Y-%m-%d")
-                    end_str = print_date_range[1].strftime("%Y-%m-%d")
+                    start_str, end_str = print_date_range[0].strftime("%Y-%m-%d"), print_date_range[1].strftime("%Y-%m-%d")
                 elif len(print_date_range) == 1:
                     start_str = end_str = print_date_range[0].strftime("%Y-%m-%d")
-                else:
-                    start_str = end_str = "9999-12-31" 
+                else: start_str = end_str = "9999-12-31" 
                 
                 def is_in_range(d_str):
                     if pd.isna(d_str) or str(d_str).strip() == "": return False
@@ -399,11 +375,9 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
                 
                 target_df = target_df[target_df['date'].apply(is_in_range)]
                 
-            if print_hide_completed:
-                target_df = target_df[target_df['status'] != '완료']
+            if print_hide_completed: target_df = target_df[target_df['status'] != '완료']
             
-            if target_df.empty:
-                st.warning("선택하신 조건(공종, 기간)에 해당하는 하자가 없습니다.")
+            if target_df.empty: st.warning("선택하신 조건(공종, 기간)에 해당하는 하자가 없습니다.")
             else:
                 bulk_html = """
                 <!DOCTYPE html>
@@ -482,11 +456,7 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
     if 'bulk_html_ready' in st.session_state:
         st.download_button(
             label="📥 생성된 일괄 보고서 다운로드 (클릭하여 열기)",
-            data=st.session_state['bulk_html_ready'],
-            file_name="일괄_하자보고서.html",
-            mime="text/html",
-            type="primary",
-            use_container_width=True
+            data=st.session_state['bulk_html_ready'], file_name="일괄_하자보고서.html", mime="text/html", type="primary", use_container_width=True
         )
 
 st.write("---")
@@ -503,13 +473,13 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-try:
-    base_img = Image.open(floor_img_map[selected_floor])
-except:
-    base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
+try: base_img = Image.open(floor_img_map[selected_floor])
+except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
-marker_radius = 8 
+
+# 💡 [핵심 반영] 마커 크기 1/3 축소 (기존 8 -> 3)
+marker_radius = 3 
 
 try: bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
 except:
@@ -556,6 +526,7 @@ if value is not None:
             if hide_completed and row['status'] == '완료': continue
             try:
                 mx, my = float(row['x']), float(row['y'])
+                # 💡 [핵심 반영] 점은 작아졌어도, 손가락 터치 반경은 기존(20.0) 유지하여 조작성 보장
                 dist = math.sqrt((mx - clicked_x)**2 + (my - clicked_y)**2)
                 if dist <= 20.0: 
                     clicked_marker_idx, clicked_marker_data = idx, row
