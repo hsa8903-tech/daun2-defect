@@ -478,8 +478,8 @@ except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
 
-# 💡 [핵심 반영] 마커 크기 1/3 축소 (기존 8 -> 3)
-marker_radius = 3 
+# 💡 [핵심 반영] 마커 크기 기존(3)에서 2배 확대 (반지름 6)
+marker_radius = 6 
 
 try: bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
 except:
@@ -526,7 +526,6 @@ if value is not None:
             if hide_completed and row['status'] == '완료': continue
             try:
                 mx, my = float(row['x']), float(row['y'])
-                # 💡 [핵심 반영] 점은 작아졌어도, 손가락 터치 반경은 기존(20.0) 유지하여 조작성 보장
                 dist = math.sqrt((mx - clicked_x)**2 + (my - clicked_y)**2)
                 if dist <= 20.0: 
                     clicked_marker_idx, clicked_marker_data = idx, row
