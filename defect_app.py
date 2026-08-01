@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 import streamlit.components.v1 as components 
-import datetime  # 💡 [핵심] 날짜(달력) 기능을 위해 추가된 모듈
+import datetime  
 
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
@@ -85,7 +85,7 @@ st.markdown("""
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 [아이폰 에러 완벽 차단용 사진 전송 로직]
+# [아이폰 에러 완벽 차단용 사진 전송 로직]
 def upload_image_to_imgbb(file_bytes):
     try:
         api_key = st.secrets["IMGBB_API_KEY"]
@@ -120,7 +120,7 @@ def upload_image_to_imgbb(file_bytes):
 conn = st.connection("gsheets", type=GSheetsConnection)
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
 
-# 💡 [데이터 초기화 및 날짜 열(date) 자동 반영]
+# [데이터 초기화 및 날짜 열(date) 자동 반영]
 if df.empty:
     df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2', 'date'])
 else:
@@ -146,12 +146,11 @@ def show_defect_details(row_idx, row_data, map_image):
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
     
-    # 💡 기존 등록일자 가져오기 (없으면 오늘 날짜)
+    # 💡 단일 하자 수정 시에는 정확한 '특정 날짜' 하루만 지정
     existing_date_str = str(row_data.get('date', ''))
     try: existing_date = datetime.datetime.strptime(existing_date_str, "%Y-%m-%d").date()
     except: existing_date = datetime.date.today()
     
-    # 💡 접수일자 수정용 달력
     edit_date = st.date_input("📅 접수 일자", existing_date)
     
     col_img1, col_img2 = st.columns(2)
@@ -191,7 +190,7 @@ def show_defect_details(row_idx, row_data, map_image):
 
                 df.at[row_idx, 'title'] = edit_title
                 df.at[row_idx, 'detail'] = edit_detail
-                df.at[row_idx, 'date'] = edit_date.strftime("%Y-%m-%d") # 💡 날짜 저장
+                df.at[row_idx, 'date'] = edit_date.strftime("%Y-%m-%d")
                 df.at[row_idx, 'photo_url'] = new_p1_url
                 df.at[row_idx, 'photo_url_2'] = new_p2_url
                 
@@ -228,7 +227,6 @@ def show_defect_details(row_idx, row_data, map_image):
         photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
         photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
         
-        # 💡 HTML 리포트에 접수일자 표기 추가
         display_date = row_data.get('date', '')
         if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
             
@@ -286,7 +284,6 @@ def show_defect_details(row_idx, row_data, map_image):
 def register_defect(x, y, current_floor):
     st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
     
-    # 💡 신규 등록 시 달력 추가 (기본값: 오늘)
     new_date = st.date_input("📅 접수 일자", datetime.date.today())
     
     new_title = st.selectbox("하자명", category_list)
@@ -317,7 +314,7 @@ def register_defect(x, y, current_floor):
                 'id': len(df) + 1, 'floor': current_floor, 'x': x, 'y': y, 
                 'title': new_title, 'detail': new_detail, 'status': '처리중',
                 'photo_url': photo_link1, 'photo_url_2': photo_link2,
-                'date': new_date.strftime("%Y-%m-%d") # 💡 DB에 날짜 저장
+                'date': new_date.strftime("%Y-%m-%d")
             }])
             updated_df = pd.concat([df, new_data], ignore_index=True)
             conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=updated_df)
@@ -335,40 +332,52 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 설비팀</div>', unsafe_allow_html=True)
 
-# 💡 [업그레이드] 일괄 출력 기능에 공종 + 달력 필터링 화면 배치
-with st.expander("🖨️ 공종 및 날짜별 보고서 일괄 출력 (모아찍기)"):
-    st.info("원하는 공종과 날짜를 지정하여 조건에 맞는 데이터를 A4 인쇄용으로 뽑아냅니다.")
+# 💡 [업그레이드] 일괄 출력 기능에 '기간 설정(Range)' 달력 필터 적용
+with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아찍기)"):
+    st.info("원하는 공종과 조회 기간을 지정하여 데이터만 쏙 뽑아냅니다. 달력에서 '시작일'과 '종료일'을 선택하세요.")
     
-    # 두 칸으로 나누어 좌측은 공종 선택, 우측은 날짜 선택 기능 배치
     col_print1, col_print2 = st.columns(2)
     with col_print1:
         print_target = st.selectbox("출력할 공종을 선택하세요", ["전체 출력"] + category_list)
     with col_print2:
-        use_date_filter = st.checkbox("📅 특정 날짜만 출력하기")
+        use_date_filter = st.checkbox("📅 특정 기간만 출력하기")
         if use_date_filter:
-            print_date = st.date_input("출력할 날짜를 달력에서 선택하세요", datetime.date.today())
+            # 💡 값이 2개 들어가는 리스트를 주면 Streamlit이 자동으로 '기간(Range) 선택' 달력으로 변신시킵니다.
+            today = datetime.date.today()
+            print_date_range = st.date_input("출력할 기간(시작~종료) 선택", value=[today, today])
         else:
-            print_date = None
+            print_date_range = None
             
     print_hide_completed = st.checkbox("✅ 완료된 하자(초록색)는 제외하고 출력하기", value=True)
     
     if st.button("🚀 조건에 맞는 보고서 생성 시작", type="primary"):
         with st.spinner("출력용 데이터를 수집 및 생성 중입니다... (5~10초 소요)"):
             
-            # 💡 [필터링 1] 공종 필터
             target_df = df if print_target == "전체 출력" else df[df['title'] == print_target]
             
-            # 💡 [필터링 2] 날짜 필터 적용
-            if use_date_filter and print_date is not None:
-                date_str = print_date.strftime("%Y-%m-%d")
-                target_df = target_df[target_df['date'] == date_str]
+            # 💡 [필터링 핵심] 시작일과 종료일 사이의 데이터만 골라내기
+            if use_date_filter and print_date_range is not None:
+                # 사용자가 달력에서 날짜를 1개만 찍었을 때와 2개 모두 찍었을 때를 구분하여 방어
+                if len(print_date_range) == 2:
+                    start_str = print_date_range[0].strftime("%Y-%m-%d")
+                    end_str = print_date_range[1].strftime("%Y-%m-%d")
+                elif len(print_date_range) == 1:
+                    start_str = end_str = print_date_range[0].strftime("%Y-%m-%d")
+                else:
+                    start_str = end_str = "9999-12-31" # 에러 방지
                 
-            # 💡 [필터링 3] 완료된 항목 숨기기
+                # 데이터 프레임 내의 문자열(YYYY-MM-DD) 날짜 크기 비교
+                def is_in_range(d_str):
+                    if pd.isna(d_str) or str(d_str).strip() == "": return False
+                    return start_str <= str(d_str) <= end_str
+                
+                target_df = target_df[target_df['date'].apply(is_in_range)]
+                
             if print_hide_completed:
                 target_df = target_df[target_df['status'] != '완료']
             
             if target_df.empty:
-                st.warning("선택하신 조건(공종, 날짜)에 해당하는 하자가 없습니다.")
+                st.warning("선택하신 조건(공종, 기간)에 해당하는 하자가 없습니다.")
             else:
                 bulk_html = """
                 <!DOCTYPE html>
