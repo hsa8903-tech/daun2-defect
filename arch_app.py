@@ -102,7 +102,7 @@ st.markdown("""
 # ==========================================
 # 🚨 [수정할 부분] 건축팀 전용 새 구글시트 주소! 
 # ==========================================
-SHEET_URL = https://docs.google.com/spreadsheets/d/1WsDidbej395X-2Ej3RpMtis7ppenNCj3JZGFfCFTWyU/edit
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1WsDidbej395X-2Ej3RpMtis7ppenNCj3JZGFfCFTWyU/edit"
 # ==========================================
 
 def upload_image_to_imgbb(file_bytes):
