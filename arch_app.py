@@ -1,0 +1,535 @@
+import streamlit as st
+import pandas as pd
+from streamlit_gsheets import GSheetsConnection
+import io
+import requests
+import base64
+from PIL import Image, ImageDraw, ImageFont, ImageOps 
+from streamlit_image_coordinates import streamlit_image_coordinates
+import math
+import streamlit.components.v1 as components 
+import datetime  
+
+# 페이지 기본 설정 (타이틀 변경)
+st.set_page_config(page_title="다운 2지구 B2BL 건축팀 하자 관리", layout="wide")
+
+components.html(
+    """
+    <script>
+    const parentMeta = window.parent.document.querySelector('meta[name="viewport"]');
+    if (parentMeta) {
+        parentMeta.content = "width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes";
+    }
+
+    const parentDoc = window.parent.document;
+    const observer = new MutationObserver(() => {
+        const calendars = parentDoc.querySelectorAll('[data-baseweb="calendar"]');
+        calendars.forEach(calendar => {
+            const elements = calendar.querySelectorAll('*');
+            elements.forEach(el => {
+                if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+                    let text = el.textContent.trim();
+                    const days = {'Su': '일', 'Mo': '월', 'Tu': '화', 'We': '수', 'Th': '목', 'Fr': '금', 'Sa': '토'};
+                    if (days[text]) { el.textContent = days[text]; return; }
+                    const monthMap = {'January': '1월', 'February': '2월', 'March': '3월', 'April': '4월', 'May': '5월', 'June': '6월', 'July': '7월', 'August': '8월', 'September': '9월', 'October': '10월', 'November': '11월', 'December': '12월'};
+                    if (monthMap[text]) { el.textContent = monthMap[text]; return; }
+                    const monthMatch = text.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+([0-9]{4})$/i);
+                    if (monthMatch) {
+                        el.textContent = monthMatch[2] + '년 ' + monthMap[monthMatch[1]];
+                    }
+                }
+            });
+        });
+    });
+    observer.observe(parentDoc.body, {childList: true, subtree: true});
+    </script>
+    """,
+    height=0
+)
+
+st.markdown("""
+<style>
+    .title-container {
+        background: linear-gradient(135deg, #132B45, #1E3F66);
+        padding: 25px 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    }
+    .main-title {
+        color: #FFFFFF !important;
+        font-size: 30px;
+        font-weight: 900;
+        margin: 0 0 8px 0;
+        letter-spacing: -0.5px;
+    }
+    .sub-title {
+        color: #FFC000 !important; 
+        font-size: 16px;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: 0.5px;
+    }
+    .team-badge {
+        display: inline-block;
+        background-color: #0D2238;
+        color: #FFFFFF;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: bold;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        border: 1px solid #1A365D;
+    }
+    .info-box {
+        background-color: #f8f9fa;
+        border-left: 4px solid #132B45;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        color: #333;
+    }
+    div.stButton > button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 🚨 [수정할 부분] 건축팀 전용 새 구글시트 주소! 
+# ==========================================
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1WsDidbej395X-2Ej3RpMtis7ppenNCj3JZGFfCFTWyU/edit"
+# ==========================================
+
+def upload_image_to_imgbb(file_bytes):
+    try: api_key = st.secrets["IMGBB_API_KEY"]
+    except: return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
+        
+    try:
+        original_img = Image.open(io.BytesIO(file_bytes))
+        try: original_img = ImageOps.exif_transpose(original_img)
+        except: pass
+            
+        clean_img = Image.new("RGB", original_img.size)
+        clean_img.paste(original_img)
+        clean_img.thumbnail((1024, 1024))
+        
+        output_buffer = io.BytesIO()
+        clean_img.save(output_buffer, format="PNG")
+        upload_bytes = output_buffer.getvalue()
+        
+        url = "https://api.imgbb.com/1/upload"
+        payload = {"key": api_key, "image": base64.b64encode(upload_bytes).decode('utf-8')}
+        response = requests.post(url, data=payload, timeout=20)
+        
+        if response.status_code == 200: return response.json()['data']['url']
+        else: return f"ERROR: 서버 거절 사유 ({response.text})"
+    except Exception as e: return f"ERROR: 코드 실행 오류 ({str(e)})"
+
+conn = st.connection("gsheets", type=GSheetsConnection)
+df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
+
+if df.empty:
+    df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2', 'date'])
+else:
+    if 'photo_url' not in df.columns: df['photo_url'] = None
+    if 'photo_url_2' not in df.columns: df['photo_url_2'] = None
+    if 'date' not in df.columns: df['date'] = ""
+    if 'floor' not in df.columns: df['floor'] = '지하 1층'
+
+# 💡 건축팀 전용 공종 리스트
+category_list = ["1. 골조", "2. 조적/미장", "3. 방수", "4. 도장", "5. 내장/수장", "6. 창호", "7. 일반/기타"]
+
+floor_img_map = {
+    "지상층(배치도)": "ground_map.jpg",
+    "지하 1층": "basement_map_b1.jpg",
+    "지하 2층": "basement_map_b2.jpg",
+    "지하 3층": "basement_map_b3.jpg"
+}
+
+@st.dialog("📋 하자 상세 정보 및 수정")
+def show_defect_details(row_idx, row_data, map_image):
+    try: current_idx = category_list.index(row_data['title'])
+    except: current_idx = 6 
+        
+    edit_title = st.selectbox("하자명", category_list, index=current_idx)
+    edit_detail = st.text_area("하자내용", value=row_data['detail'])
+    
+    existing_date_str = str(row_data.get('date', ''))
+    try: existing_date = datetime.datetime.strptime(existing_date_str, "%Y-%m-%d").date()
+    except: existing_date = datetime.date.today()
+    
+    edit_date = st.date_input("📅 접수 일자", existing_date, format="YYYY-MM-DD")
+    
+    col_img1, col_img2 = st.columns(2)
+    p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
+
+    with col_img1:
+        if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
+        else: st.info("등록된 사진 1 없음")
+    with col_img2:
+        if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
+        else: st.info("등록된 사진 2 없음")
+            
+    with st.expander("🔄 사진 변경/추가하기 (선택사항)"):
+        st.caption("새로운 사진을 선택/촬영하시면 기존 사진을 덮어씁니다.")
+        st.markdown("**[새 사진 1]**")
+        edit_ut1 = st.radio("사진 1 변경 방식", ["유지", "🖼️ 선택", "📸 촬영"], horizontal=True, key=f"e_ut1_{row_idx}")
+        edit_img1 = st.file_uploader("새 사진 1 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu1_{row_idx}") if edit_ut1 == "🖼️ 선택" else st.camera_input("📸 새 사진 1 촬영", key=f"e_ci1_{row_idx}") if edit_ut1 == "📸 촬영" else None
+
+        st.write("---")
+        st.markdown("**[새 사진 2]**")
+        edit_ut2 = st.radio("사진 2 변경 방식", ["유지", "🖼️ 선택", "📸 촬영"], horizontal=True, key=f"e_ut2_{row_idx}")
+        edit_img2 = st.file_uploader("새 사진 2 선택", type=['jpg', 'jpeg', 'png'], key=f"e_fu2_{row_idx}") if edit_ut2 == "🖼️ 선택" else st.camera_input("📸 새 사진 2 촬영", key=f"e_ci2_{row_idx}") if edit_ut2 == "📸 촬영" else None
+    
+    st.write("---")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("💾 내용/사진 수정", use_container_width=True):
+            with st.spinner('수정된 데이터를 저장 중입니다...'):
+                new_p1_url, new_p2_url = p1_url, p2_url
+                if edit_ut1 != "유지" and edit_img1:
+                    res1 = upload_image_to_imgbb(edit_img1.getvalue())
+                    if not res1.startswith("ERROR"): new_p1_url = res1
+                if edit_ut2 != "유지" and edit_img2:
+                    res2 = upload_image_to_imgbb(edit_img2.getvalue())
+                    if not res2.startswith("ERROR"): new_p2_url = res2
+
+                df.at[row_idx, 'title'] = edit_title
+                df.at[row_idx, 'detail'] = edit_detail
+                df.at[row_idx, 'date'] = edit_date.strftime("%Y-%m-%d")
+                df.at[row_idx, 'photo_url'] = new_p1_url
+                df.at[row_idx, 'photo_url_2'] = new_p2_url
+                
+                conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=df)
+            st.session_state['last_click'] = None
+            st.rerun()
+            
+    with col2:
+        if row_data['status'] == '처리중':
+            if st.button("✅ 처리 완료", type="primary", use_container_width=True):
+                df.at[row_idx, 'status'] = '완료'
+                conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=df)
+                st.session_state['last_click'] = None
+                st.rerun()
+        else:
+            st.success("조치 완료됨")
+            
+    with col3:
+        print_img = map_image.copy()
+        draw_print = ImageDraw.Draw(print_img)
+        try:
+            tx, ty = float(row_data['x']), float(row_data['y'])
+            for angle in range(0, 360, 45):
+                rad = math.radians(angle)
+                cx, cy = tx + 35 * math.cos(rad), ty + 35 * math.sin(rad)
+                draw_print.ellipse((cx - 15, cy - 15, cx + 15, cy + 15), outline="red", width=4)
+            draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
+        except: pass
+            
+        buffered = io.BytesIO()
+        print_img.save(buffered, format="JPEG")
+        map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+        photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
+        photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
+        
+        display_date = row_data.get('date', '')
+        if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
+            
+        report_html = f"""
+        <!DOCTYPE html>
+        <html lang="ko">
+        <head><meta charset="utf-8"><title>하자 보고서 (No.{int(row_data['id'])})</title>
+        <style>
+            @page {{ size: A4 portrait; margin: 10mm; }}
+            body {{ font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 0; background: #eee;}}
+            .page {{ width: 190mm; height: 277mm; margin: 0 auto; display: flex; flex-direction: column; background: white; padding: 5mm; box-sizing: border-box;}}
+            .top-map {{ height: 48%; border-bottom: 2px solid #333; padding-bottom: 3mm; margin-bottom: 5mm; text-align: center; overflow: hidden; }}
+            .top-map img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
+            .bottom-info {{ height: 50%; display: flex; flex-direction: column; gap: 5mm; }}
+            .photo-section {{ height: 60%; display: flex; gap: 5mm; }}
+            .photo-box {{ width: 50%; height: 100%; text-align: center; border: 1px solid #ddd; padding: 2mm; box-sizing: border-box; display: flex; align-items: center; justify-content: center; overflow: hidden;}}
+            .photo-box img {{ max-width: 100%; max-height: 100%; object-fit: contain; }}
+            .no-img {{ color: #999; font-size: 14pt; }}
+            .text-section {{ height: 38%; display: flex; flex-direction: column; gap: 3mm;}}
+            .info-header {{ display: flex; gap: 2mm; align-items: center; }}
+            .info-floor {{ font-size: 16pt; font-weight: bold; color: #555; }}
+            .info-title {{ flex-grow: 1; font-size: 17pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; display: flex; align-items: center; justify-content: space-between;}}
+            .info-date {{ font-size: 12pt; font-weight: normal; color: #666; }}
+            .info-detail-box {{ border: 1px solid #ccc; border-radius: 4px; padding: 10px; height: 100%; overflow: hidden; }}
+            .info-detail-label {{ font-size: 14pt; font-weight: bold; color: #333; margin-bottom: 5px; display: block;}}
+            .info-detail-content {{ font-size: 15pt; line-height: 1.5; white-space: pre-wrap; color: #444; }}
+        </style></head>
+        <body>
+            <div class="page">
+                <div class="top-map"><img src="data:image/jpeg;base64,{map_b64}" alt="도면"></div>
+                <div class="bottom-info">
+                    <div class="photo-section"><div class="photo-box">{photo1_html}</div><div class="photo-box">{photo2_html}</div></div>
+                    <div class="text-section">
+                        <div class="info-header">
+                            <div class="info-floor">[{row_data['floor']}]</div>
+                            <div class="info-title">
+                                <span>공종: {row_data['title']} (No.{int(row_data['id'])})</span>
+                                <span class="info-date">(접수일: {display_date})</span>
+                            </div>
+                        </div>
+                        <div class="info-detail-box"><span class="info-detail-label">■ 하자내용</span><div class="info-detail-content">{row_data['detail']}</div></div>
+                    </div>
+                </div>
+            </div>
+            <script>window.onload = function() {{ setTimeout(function(){{ window.print(); }}, 500); }};</script>
+        </body></html>
+        """
+        
+        st.download_button(
+            label="🖨️ A4 인쇄용 파일 다운",
+            data=report_html.encode('utf-8'), file_name=f"하자보고서_No{int(row_data['id'])}.html", mime="text/html", use_container_width=True
+        )
+
+@st.dialog("📝 신규 하자 등록")
+def register_defect(x, y, current_floor):
+    st.info(f"{current_floor} 도면의 터치하신 위치에 등록합니다.")
+    new_date = st.date_input("📅 접수 일자", datetime.date.today(), format="YYYY-MM-DD")
+    new_title = st.selectbox("하자명", category_list)
+    new_detail = st.text_area("하자내용")
+    
+    st.write("---")
+    st.subheader("🖼️ 사진 등록 (최대 2장)")
+    st.markdown("**[사진 1]**")
+    upload_type1 = st.radio("사진 1 첨부 방식", ["🖼️ 선택", "📸 촬영"], horizontal=True, key="ut1")
+    img_buffer1 = st.file_uploader("사진 1 선택", type=['jpg', 'jpeg', 'png'], key="fu1") if upload_type1 == "🖼️ 선택" else st.camera_input("📸 사진 1 촬영", key="ci1")
+
+    st.write("---")
+    st.markdown("**[사진 2]**")
+    upload_type2 = st.radio("사진 2 첨부 방식", ["🖼️ 선택", "📸 촬영"], horizontal=True, key="ut2")
+    img_buffer2 = st.file_uploader("사진 2 선택", type=['jpg', 'jpeg', 'png'], key="fu2") if upload_type2 == "🖼️ 선택" else st.camera_input("📸 사진 2 촬영", key="ci2")
+    
+    if st.button("등록하기", type="primary", use_container_width=True):
+        with st.spinner('안전한 이미지 서버로 데이터 전송 중...'):
+            photo_link1, photo_link2 = "", ""
+            if img_buffer1:
+                photo_link1 = upload_image_to_imgbb(img_buffer1.getvalue())
+                if photo_link1.startswith("ERROR"): st.error(f"사진 1 에러: {photo_link1}"); st.stop()
+            if img_buffer2:
+                photo_link2 = upload_image_to_imgbb(img_buffer2.getvalue())
+                if photo_link2.startswith("ERROR"): st.error(f"사진 2 에러: {photo_link2}"); st.stop()
+            
+            new_data = pd.DataFrame([{
+                'id': len(df) + 1, 'floor': current_floor, 'x': x, 'y': y, 
+                'title': new_title, 'detail': new_detail, 'status': '처리중',
+                'photo_url': photo_link1, 'photo_url_2': photo_link2,
+                'date': new_date.strftime("%Y-%m-%d")
+            }])
+            updated_df = pd.concat([df, new_data], ignore_index=True)
+            conn.update(spreadsheet=SHEET_URL, worksheet="Sheet1", data=updated_df)
+            
+        st.success("등록 완료!")
+        st.session_state['last_click'] = None
+        st.rerun()
+
+# --- 메인 화면 ---
+st.markdown("""
+    <div class="title-container">
+        <h1 class="main-title">🏢 우미건설 다운 2지구 B2BL 건축팀 하자 관리</h1>
+        <div class="sub-title">모바일 도면 기반 통합 하자 관리 플랫폼</div>
+    </div>
+""", unsafe_allow_html=True)
+st.markdown('<div class="team-badge">🛠️ 울산다운2지구 B2BL 건축팀</div>', unsafe_allow_html=True)
+
+with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아찍기)"):
+    st.info("원하는 공종과 조회 기간을 지정하여 데이터만 쏙 뽑아냅니다. 달력에서 '시작일'과 '종료일'을 선택하세요.")
+    
+    col_print1, col_print2 = st.columns(2)
+    with col_print1:
+        print_target = st.selectbox("출력할 공종을 선택하세요", ["전체 출력"] + category_list)
+    with col_print2:
+        use_date_filter = st.checkbox("📅 특정 기간만 출력하기")
+        if use_date_filter:
+            today = datetime.date.today()
+            print_date_range = st.date_input("출력할 기간(시작~종료) 선택", value=[today, today], format="YYYY-MM-DD")
+        else: print_date_range = None
+            
+    print_hide_completed = st.checkbox("✅ 완료된 하자(초록색)는 제외하고 출력하기", value=True)
+    
+    if st.button("🚀 조건에 맞는 보고서 생성 시작", type="primary"):
+        with st.spinner("출력용 데이터를 수집 및 생성 중입니다... (5~10초 소요)"):
+            
+            target_df = df if print_target == "전체 출력" else df[df['title'] == print_target]
+            
+            if use_date_filter and print_date_range is not None:
+                if len(print_date_range) == 2:
+                    start_str, end_str = print_date_range[0].strftime("%Y-%m-%d"), print_date_range[1].strftime("%Y-%m-%d")
+                elif len(print_date_range) == 1:
+                    start_str = end_str = print_date_range[0].strftime("%Y-%m-%d")
+                else: start_str = end_str = "9999-12-31" 
+                
+                def is_in_range(d_str):
+                    if pd.isna(d_str) or str(d_str).strip() == "": return False
+                    return start_str <= str(d_str) <= end_str
+                
+                target_df = target_df[target_df['date'].apply(is_in_range)]
+                
+            if print_hide_completed: target_df = target_df[target_df['status'] != '완료']
+            
+            if target_df.empty: st.warning("선택하신 조건(공종, 기간)에 해당하는 하자가 없습니다.")
+            else:
+                bulk_html = """
+                <!DOCTYPE html>
+                <html lang="ko">
+                <head><meta charset="utf-8"><title>일괄 하자 보고서</title>
+                <style>
+                    @page { size: A4 portrait; margin: 10mm; }
+                    body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; background: #eee;}
+                    .page { width: 190mm; height: 277mm; margin: 0 auto; display: flex; flex-direction: column; background: white; padding: 5mm; box-sizing: border-box; page-break-after: always; }
+                    .top-map { height: 48%; border-bottom: 2px solid #333; padding-bottom: 3mm; margin-bottom: 5mm; text-align: center; overflow: hidden; }
+                    .top-map img { max-width: 100%; max-height: 100%; object-fit: contain; }
+                    .bottom-info { height: 50%; display: flex; flex-direction: column; gap: 5mm; }
+                    .photo-section { height: 60%; display: flex; gap: 5mm; }
+                    .photo-box { width: 50%; height: 100%; text-align: center; border: 1px solid #ddd; padding: 2mm; box-sizing: border-box; display: flex; align-items: center; justify-content: center; overflow: hidden;}
+                    .photo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+                    .no-img { color: #999; font-size: 14pt; }
+                    .text-section { height: 38%; display: flex; flex-direction: column; gap: 3mm;}
+                    .info-header { display: flex; gap: 2mm; align-items: center; }
+                    .info-floor { font-size: 16pt; font-weight: bold; color: #555; }
+                    .info-title { flex-grow: 1; font-size: 17pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; display: flex; align-items: center; justify-content: space-between;}
+                    .info-date { font-size: 12pt; font-weight: normal; color: #666; }
+                    .info-detail-box { border: 1px solid #ccc; border-radius: 4px; padding: 10px; height: 100%; overflow: hidden; }
+                    .info-detail-label { font-size: 14pt; font-weight: bold; color: #333; margin-bottom: 5px; display: block;}
+                    .info-detail-content { font-size: 15pt; line-height: 1.5; white-space: pre-wrap; color: #444; }
+                </style></head><body>
+                """
+                
+                for idx, row_data in target_df.iterrows():
+                    try: base_map_print = Image.open(floor_img_map.get(row_data['floor'], "ground_map.jpg")).copy()
+                    except: base_map_print = Image.new('RGB', (800, 600), color=(200, 200, 200))
+                    
+                    draw_print = ImageDraw.Draw(base_map_print)
+                    try:
+                        tx, ty = float(row_data['x']), float(row_data['y'])
+                        for angle in range(0, 360, 45):
+                            rad = math.radians(angle)
+                            cx, cy = tx + 35 * math.cos(rad), ty + 35 * math.sin(rad)
+                            draw_print.ellipse((cx - 15, cy - 15, cx + 15, cy + 15), outline="red", width=4)
+                        draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
+                    except: pass
+                    
+                    buffered = io.BytesIO()
+                    base_map_print.save(buffered, format="JPEG")
+                    map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                    
+                    p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
+                    photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
+                    photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
+                    
+                    display_date = row_data.get('date', '')
+                    if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
+                    
+                    bulk_html += f"""
+                    <div class="page">
+                        <div class="top-map"><img src="data:image/jpeg;base64,{map_b64}" alt="도면"></div>
+                        <div class="bottom-info">
+                            <div class="photo-section"><div class="photo-box">{photo1_html}</div><div class="photo-box">{photo2_html}</div></div>
+                            <div class="text-section">
+                                <div class="info-header">
+                                    <div class="info-floor">[{row_data['floor']}]</div>
+                                    <div class="info-title">
+                                        <span>공종: {row_data['title']} (No.{int(row_data['id'])})</span>
+                                        <span class="info-date">(접수일: {display_date})</span>
+                                    </div>
+                                </div>
+                                <div class="info-detail-box"><span class="info-detail-label">■ 하자내용</span><div class="info-detail-content">{row_data['detail']}</div></div>
+                            </div>
+                        </div>
+                    </div>
+                    """
+                
+                bulk_html += """<script>window.onload = function() { setTimeout(function(){ window.print(); }, 800); };</script></body></html>"""
+                st.session_state['bulk_html_ready'] = bulk_html.encode('utf-8')
+                st.success(f"✅ 총 {len(target_df)}건의 보고서가 준비되었습니다! 아래 버튼을 눌러 파일을 다운로드하세요.")
+
+    if 'bulk_html_ready' in st.session_state:
+        st.download_button(
+            label="📥 생성된 일괄 보고서 다운로드 (클릭하여 열기)",
+            data=st.session_state['bulk_html_ready'], file_name="일괄_하자보고서.html", mime="text/html", type="primary", use_container_width=True
+        )
+
+st.write("---")
+col1, col2 = st.columns([1, 1])
+with col1:
+    selected_floor = st.radio("📍 도면 층수 선택", ["지상층(배치도)", "지하 1층", "지하 2층", "지하 3층"], horizontal=True)
+with col2:
+    hide_completed = st.toggle("✅ 조치 완료(초록색) 마커 숨기기", value=False)
+
+st.markdown("""
+    <div class="info-box">
+        💡 <b>도면 바깥쪽(제목이나 여백)에 두 손가락을 대면 화면 확대가 가능합니다!</b><br>
+        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
+    </div>
+""", unsafe_allow_html=True)
+
+try: base_img = Image.open(floor_img_map[selected_floor])
+except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
+
+draw = ImageDraw.Draw(base_img)
+marker_radius = 8 
+
+try: bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
+except:
+    try: bold_font = ImageFont.truetype("malgunbd.ttf", 18)
+    except: bold_font = ImageFont.load_default()
+
+current_floor_df = df[df['floor'] == selected_floor]
+
+for idx, row in current_floor_df.iterrows():
+    if hide_completed and row['status'] == '완료': continue
+    try:
+        x, y = float(row['x']), float(row['y'])
+        if row['status'] == '완료': color = "green"
+        else:
+            # 💡 건축팀 공종에 맞춘 색상 맵핑
+            if row['title'] == '1. 골조': color = "#A9A9A9" # 회색
+            elif row['title'] == '2. 조적/미장': color = "#8B4513" # 갈색
+            elif row['title'] == '3. 방수': color = "#1E90FF" # 파란색
+            elif row['title'] == '4. 도장': color = "#FF69B4" # 핑크색
+            elif row['title'] == '5. 내장/수장': color = "#9ACD32" # 연두색
+            elif row['title'] == '6. 창호': color = "#4682B4" # 남색
+            elif row['title'] == '7. 일반/기타': color = "purple" # 보라색
+            else: color = "red" 
+            
+        draw.ellipse((x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), fill=color, outline="white", width=1)
+        text_num = str(int(row['id']))
+        text_x, text_y = x + 12, y - 15
+        
+        draw.text((text_x-1, text_y), text_num, fill="white", font=bold_font)
+        draw.text((text_x+1, text_y), text_num, fill="white", font=bold_font)
+        draw.text((text_x, text_y-1), text_num, fill="white", font=bold_font)
+        draw.text((text_x, text_y+1), text_num, fill="white", font=bold_font)
+        draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
+    except: pass
+
+value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
+
+if value is not None:
+    if 'last_click' not in st.session_state or st.session_state['last_click'] != value:
+        st.session_state['last_click'] = value
+        clicked_x, clicked_y = value['x'], value['y']
+        clicked_marker_idx, clicked_marker_data = None, None
+        
+        for idx, row in current_floor_df.iterrows():
+            if hide_completed and row['status'] == '완료': continue
+            try:
+                mx, my = float(row['x']), float(row['y'])
+                dist = math.sqrt((mx - clicked_x)**2 + (my - clicked_y)**2)
+                if dist <= 20.0: 
+                    clicked_marker_idx, clicked_marker_data = idx, row
+                    break
+            except: pass
+        
+        if clicked_marker_data is not None: show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
+        else: register_defect(clicked_x, clicked_y, selected_floor)
