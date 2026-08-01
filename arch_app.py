@@ -10,7 +10,7 @@ import math
 import streamlit.components.v1 as components 
 import datetime  
 
-# 페이지 기본 설정 (타이틀 변경)
+# 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 건축팀 하자 관리", layout="wide")
 
 components.html(
@@ -102,7 +102,7 @@ st.markdown("""
 # ==========================================
 # 🚨 [수정할 부분] 건축팀 전용 새 구글시트 주소! 
 # ==========================================
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1WsDidbej395X-2Ej3RpMtis7ppenNCj3JZGFfCFTWyU/edit"
+SHEET_URL = https://docs.google.com/spreadsheets/d/1WsDidbej395X-2Ej3RpMtis7ppenNCj3JZGFfCFTWyU/edit
 # ==========================================
 
 def upload_image_to_imgbb(file_bytes):
@@ -141,8 +141,12 @@ else:
     if 'date' not in df.columns: df['date'] = ""
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
-# 💡 건축팀 전용 공종 리스트
-category_list = ["1. 골조", "2. 조적/미장", "3. 방수", "4. 도장", "5. 내장/수장", "6. 창호", "7. 일반/기타"]
+# 💡 [업데이트] 건축팀 공종 리스트 대폭 추가 및 명칭 변경
+category_list = [
+    "1. 골조", "2. 조적/미장", "3. 방수", "4. 도장", "5. 내장/수장", 
+    "6. 창호", "7. 방화문", "8. AL", "9. 타일", "10. 준공청소", 
+    "11. 사인몰", "12. 직영"
+]
 
 floor_img_map = {
     "지상층(배치도)": "ground_map.jpg",
@@ -154,7 +158,7 @@ floor_img_map = {
 @st.dialog("📋 하자 상세 정보 및 수정")
 def show_defect_details(row_idx, row_data, map_image):
     try: current_idx = category_list.index(row_data['title'])
-    except: current_idx = 6 
+    except: current_idx = 11 # 12. 직영이 기본값
         
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
@@ -232,7 +236,7 @@ def show_defect_details(row_idx, row_data, map_image):
             draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
         except: pass
             
-        buffered = io.BytesIO()
+        buffered = io.IO()
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
@@ -492,14 +496,19 @@ for idx, row in current_floor_df.iterrows():
         x, y = float(row['x']), float(row['y'])
         if row['status'] == '완료': color = "green"
         else:
-            # 💡 건축팀 공종에 맞춘 색상 맵핑
-            if row['title'] == '1. 골조': color = "#A9A9A9" # 회색
-            elif row['title'] == '2. 조적/미장': color = "#8B4513" # 갈색
-            elif row['title'] == '3. 방수': color = "#1E90FF" # 파란색
-            elif row['title'] == '4. 도장': color = "#FF69B4" # 핑크색
-            elif row['title'] == '5. 내장/수장': color = "#9ACD32" # 연두색
-            elif row['title'] == '6. 창호': color = "#4682B4" # 남색
-            elif row['title'] == '7. 일반/기타': color = "purple" # 보라색
+            # 💡 [업데이트] 건축팀 공종별 마커 색상 지정
+            if row['title'] == '1. 골조': color = "#A9A9A9" 
+            elif row['title'] == '2. 조적/미장': color = "#8B4513" 
+            elif row['title'] == '3. 방수': color = "#1E90FF" 
+            elif row['title'] == '4. 도장': color = "#FF69B4" 
+            elif row['title'] == '5. 내장/수장': color = "#9ACD32" 
+            elif row['title'] == '6. 창호': color = "#4682B4" 
+            elif row['title'] == '7. 방화문': color = "#FF4500" # 강렬한 오렌지 레드
+            elif row['title'] == '8. AL': color = "#708090" # 슬레이트 그레이
+            elif row['title'] == '9. 타일': color = "#20B2AA" # 라이트 씨그린
+            elif row['title'] == '10. 준공청소': color = "#00FFFF" # 투명한 청록(시안)
+            elif row['title'] == '11. 사인몰': color = "#FFD700" # 골드
+            elif row['title'] == '12. 직영': color = "purple" # 보라색 유지
             else: color = "red" 
             
         draw.ellipse((x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), fill=color, outline="white", width=1)
