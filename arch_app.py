@@ -158,7 +158,7 @@ floor_img_map = {
 @st.dialog("📋 하자 상세 정보 및 수정")
 def show_defect_details(row_idx, row_data, map_image):
     try: current_idx = category_list.index(row_data['title'])
-    except: current_idx = 11 # 12. 직영이 기본값
+    except: current_idx = 11 
         
     edit_title = st.selectbox("하자명", category_list, index=current_idx)
     edit_detail = st.text_area("하자내용", value=row_data['detail'])
@@ -236,7 +236,6 @@ def show_defect_details(row_idx, row_data, map_image):
             draw_print.ellipse((tx - 20, ty - 20, tx + 20, ty + 20), outline="red", width=2)
         except: pass
             
-        # 💡 [핵심 수정] io.IO() 오타를 io.BytesIO()로 올바르게 변경했습니다!
         buffered = io.BytesIO()
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
@@ -471,9 +470,9 @@ with col1:
 with col2:
     hide_completed = st.toggle("✅ 조치 완료(초록색) 마커 숨기기", value=False)
 
+# 💡 [핵심 반영] 모바일 확대 관련 안내 문구 완벽 삭제
 st.markdown("""
     <div class="info-box">
-        💡 <b>도면 바깥쪽(제목이나 여백)에 두 손가락을 대면 화면 확대가 가능합니다!</b><br>
         💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
     </div>
 """, unsafe_allow_html=True)
