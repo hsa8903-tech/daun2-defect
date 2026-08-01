@@ -103,6 +103,7 @@ st.markdown("""
 # 🚨 [수정할 부분] 설비팀 시트 주소 확인!
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
+
 # ==========================================
 
 def upload_image_to_imgbb(file_bytes):
@@ -466,9 +467,9 @@ with col1:
 with col2:
     hide_completed = st.toggle("✅ 조치 완료(초록색) 마커 숨기기", value=False)
 
+# 💡 [핵심 반영] 작동하지 않는 모바일 확대 안내 문구 완전 삭제
 st.markdown("""
     <div class="info-box">
-        💡 <b>도면 바깥쪽(제목이나 여백)에 두 손가락을 대면 화면 확대가 가능합니다!</b><br>
         💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
     </div>
 """, unsafe_allow_html=True)
@@ -478,7 +479,7 @@ except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
 
-# 💡 [핵심 반영] 마커 크기 기존(3)에서 2배 확대 (반지름 6)
+# 마커 크기 기존(3)에서 2배 확대 (반지름 6)
 marker_radius = 6 
 
 try: bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
@@ -494,6 +495,7 @@ for idx, row in current_floor_df.iterrows():
         x, y = float(row['x']), float(row['y'])
         if row['status'] == '완료': color = "green"
         else:
+            # 💡 [오류 정상화] 설비팀 전용 공종 색상 매핑으로 완벽 복구 완료!
             if row['title'] == '1. 설비': color = "blue"
             elif row['title'] == '2. 소방': color = "red"
             elif row['title'] == '3. 자동제어': color = "#FFC000" 
