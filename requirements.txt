@@ -1,6 +1,6 @@
-streamlit==1.39.0
+streamlit==1.37.0
 pandas
 st-gsheets-connection
 Pillow
 requests
-streamlit-image-coordinates
+streamlit-image-coordinates==0.1.6
