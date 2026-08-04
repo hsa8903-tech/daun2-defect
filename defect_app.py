@@ -5,7 +5,7 @@ import io
 import requests
 import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps 
-from streamlit_image_coordinates import streamlit_image_coordinates
+from streamlit_drawable_canvas import st_canvas
 import math
 import streamlit.components.v1 as components 
 import datetime  
@@ -103,7 +103,6 @@ st.markdown("""
 # 🚨 [수정할 부분] 설비팀 시트 주소 확인!
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
-
 # ==========================================
 
 def upload_image_to_imgbb(file_bytes):
@@ -467,7 +466,6 @@ with col1:
 with col2:
     hide_completed = st.toggle("✅ 조치 완료(초록색) 마커 숨기기", value=False)
 
-# 💡 [핵심 반영] 작동하지 않는 모바일 확대 안내 문구 완전 삭제
 st.markdown("""
     <div class="info-box">
         💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
@@ -495,7 +493,6 @@ for idx, row in current_floor_df.iterrows():
         x, y = float(row['x']), float(row['y'])
         if row['status'] == '완료': color = "green"
         else:
-            # 💡 [오류 정상화] 설비팀 전용 공종 색상 매핑으로 완벽 복구 완료!
             if row['title'] == '1. 설비': color = "blue"
             elif row['title'] == '2. 소방': color = "red"
             elif row['title'] == '3. 자동제어': color = "#FFC000" 
@@ -516,12 +513,33 @@ for idx, row in current_floor_df.iterrows():
         draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
     except: pass
 
-value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
+# 💡 [고급 부품 교체] UseColumnWith 에러 원천 차단!
+canvas_result = st_canvas(
+    fill_color="rgba(0, 0, 0, 0)",  # 터치용 투명 설정
+    stroke_width=0,
+    background_image=base_img,
+    update_streamlit=True,
+    height=base_img.height,
+    width=base_img.width,
+    drawing_mode="point",
+    point_display_radius=0, 
+    key=f"map_{selected_floor}",
+)
 
-if value is not None:
-    if 'last_click' not in st.session_state or st.session_state['last_click'] != value:
-        st.session_state['last_click'] = value
-        clicked_x, clicked_y = value['x'], value['y']
+if canvas_result.json_data is not None:
+    objects = canvas_result.json_data.get("objects", [])
+    
+    # 클릭 횟수를 추적하여 '새로운 클릭'이 발생했을 때만 창을 띄웁니다.
+    if f"click_count_{selected_floor}" not in st.session_state:
+        st.session_state[f"click_count_{selected_floor}"] = 0
+        
+    if len(objects) > st.session_state[f"click_count_{selected_floor}"]:
+        st.session_state[f"click_count_{selected_floor}"] = len(objects)
+        
+        last_obj = objects[-1]
+        clicked_x = last_obj["left"]
+        clicked_y = last_obj["top"]
+        
         clicked_marker_idx, clicked_marker_data = None, None
         
         for idx, row in current_floor_df.iterrows():
@@ -534,5 +552,7 @@ if value is not None:
                     break
             except: pass
         
-        if clicked_marker_data is not None: show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
-        else: register_defect(clicked_x, clicked_y, selected_floor)
+        if clicked_marker_data is not None: 
+            show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
+        else: 
+            register_defect(clicked_x, clicked_y, selected_floor)
