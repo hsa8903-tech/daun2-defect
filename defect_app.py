@@ -5,7 +5,7 @@ import io
 import requests
 import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps 
-from streamlit_drawable_canvas import st_canvas
+from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 import streamlit.components.v1 as components 
 import datetime  
@@ -100,7 +100,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🚨 [수정할 부분] 설비팀 시트 주소 확인!
+# 🚨 [수정할 부분] 설비팀 시트 주소 꼭 확인!
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
@@ -477,7 +477,7 @@ except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
 
-# 마커 크기 기존(3)에서 2배 확대 (반지름 6)
+# 마커 크기 2배 확대 (반지름 6)
 marker_radius = 6 
 
 try: bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
@@ -513,33 +513,12 @@ for idx, row in current_floor_df.iterrows():
         draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
     except: pass
 
-# 💡 [고급 부품 교체] UseColumnWith 에러 원천 차단!
-canvas_result = st_canvas(
-    fill_color="rgba(0, 0, 0, 0)",  # 터치용 투명 설정
-    stroke_width=0,
-    background_image=base_img,
-    update_streamlit=True,
-    height=base_img.height,
-    width=base_img.width,
-    drawing_mode="point",
-    point_display_radius=0, 
-    key=f"map_{selected_floor}",
-)
+value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
 
-if canvas_result.json_data is not None:
-    objects = canvas_result.json_data.get("objects", [])
-    
-    # 클릭 횟수를 추적하여 '새로운 클릭'이 발생했을 때만 창을 띄웁니다.
-    if f"click_count_{selected_floor}" not in st.session_state:
-        st.session_state[f"click_count_{selected_floor}"] = 0
-        
-    if len(objects) > st.session_state[f"click_count_{selected_floor}"]:
-        st.session_state[f"click_count_{selected_floor}"] = len(objects)
-        
-        last_obj = objects[-1]
-        clicked_x = last_obj["left"]
-        clicked_y = last_obj["top"]
-        
+if value is not None:
+    if 'last_click' not in st.session_state or st.session_state['last_click'] != value:
+        st.session_state['last_click'] = value
+        clicked_x, clicked_y = value['x'], value['y']
         clicked_marker_idx, clicked_marker_data = None, None
         
         for idx, row in current_floor_df.iterrows():
@@ -552,7 +531,5 @@ if canvas_result.json_data is not None:
                     break
             except: pass
         
-        if clicked_marker_data is not None: 
-            show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
-        else: 
-            register_defect(clicked_x, clicked_y, selected_floor)
+        if clicked_marker_data is not None: show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
+        else: register_defect(clicked_x, clicked_y, selected_floor)
