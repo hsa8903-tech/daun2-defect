@@ -137,7 +137,7 @@ def upload_image_to_imgbb(file_bytes):
     except Exception as e: return f"ERROR: 코드 실행 오류 ({str(e)})"
 
 conn = st.connection("gsheets", type=GSheetsConnection)
-df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
+df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=5)
 
 if df.empty:
     df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2', 'date'])
