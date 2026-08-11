@@ -5,10 +5,10 @@ import io
 import requests
 import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps 
+from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 import streamlit.components.v1 as components 
-import datetime 
-from streamlit_image_coordinates import streamlit_image_coordinates
+import datetime  
 
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
@@ -96,16 +96,27 @@ st.markdown("""
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
     }
+    
+    /* 🚨 [핵심] 모바일 환경에서 도면 가로 스크롤(스와이프) 완벽 활성화 */
+    .stApp, .block-container {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important; 
+    }
+    
+    /* 🚨 이미지 좌표 컴포넌트가 모바일 화면에 맞춰 작아지는 현상 원천 차단 */
+    iframe {
+        min-width: 1000px !important; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🚨 설비팀 시트 주소
+# 🚨 [수정할 부분] 설비팀 시트 주소 확인!
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 사진 에러 방지용 안전망
+# 💡 사진 미등록 시 발생하는 TypeError 방지 함수
 def is_valid_url(url):
     return isinstance(url, str) and url.startswith("http")
 
@@ -135,8 +146,7 @@ def upload_image_to_imgbb(file_bytes):
     except Exception as e: return f"ERROR: 코드 실행 오류 ({str(e)})"
 
 conn = st.connection("gsheets", type=GSheetsConnection)
-
-# 💡 구글 API 통신 거절 에러(디도스 방지) 해결: ttl=5 
+# 💡 API 에러(차단) 방지를 위해 ttl=0 을 ttl=5 로 변경
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=5)
 
 if df.empty:
@@ -174,6 +184,7 @@ def show_defect_details(row_idx, row_data, map_image):
     col_img1, col_img2 = st.columns(2)
     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
 
+    # 💡 URL 검증 안전장치 적용
     with col_img1:
         if is_valid_url(p1_url): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
         else: st.info("등록된 사진 1 없음")
@@ -242,8 +253,8 @@ def show_defect_details(row_idx, row_data, map_image):
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
-        photo1_html = f'<img src="{p1_url}" />' if is_valid_url(p1_url) else '<div class="no-img">사진 1 없음</div>'
-        photo2_html = f'<img src="{p2_url}" />' if is_valid_url(p2_url) else '<div class="no-img">사진 2 없음</div>'
+        photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
+        photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
         
         display_date = row_data.get('date', '')
         if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
@@ -430,8 +441,8 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
                     map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                     
                     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
-                    photo1_html = f'<img src="{p1_url}" />' if is_valid_url(p1_url) else '<div class="no-img">사진 1 없음</div>'
-                    photo2_html = f'<img src="{p2_url}" />' if is_valid_url(p2_url) else '<div class="no-img">사진 2 없음</div>'
+                    photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
+                    photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
                     
                     display_date = row_data.get('date', '')
                     if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
@@ -478,11 +489,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# -------------------------------------------------------------------------
-# 🚨 직관적인 좌표 터치 방식 (streamlit-image-coordinates)
-# -------------------------------------------------------------------------
-
-try: base_img = Image.open(floor_img_map.get(selected_floor, "ground_map.jpg"))
+try: base_img = Image.open(floor_img_map[selected_floor])
 except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
@@ -523,7 +530,6 @@ for idx, row in current_floor_df.iterrows():
         draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
     except: pass
 
-# 이미지 송출 및 클릭한 곳의 X,Y 좌표 실시간으로 따오기
 value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
 
 if value is not None:
@@ -532,7 +538,6 @@ if value is not None:
         clicked_x, clicked_y = value['x'], value['y']
         clicked_marker_idx, clicked_marker_data = None, None
         
-        # 내가 터치한 곳 주변에 기존 핀이 있는지 확인
         for idx, row in current_floor_df.iterrows():
             if hide_completed and row['status'] == '완료': continue
             try:
@@ -543,8 +548,5 @@ if value is not None:
                     break
             except: pass
         
-        # 있으면 상세내용 오픈, 없으면 새 접수 오픈
-        if clicked_marker_data is not None: 
-            show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
-        else: 
-            register_defect(clicked_x, clicked_y, selected_floor)
+        if clicked_marker_data is not None: show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
+        else: register_defect(clicked_x, clicked_y, selected_floor)
