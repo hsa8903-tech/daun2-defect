@@ -97,15 +97,19 @@ st.markdown("""
         transition: all 0.3s ease !important;
     }
     
-    /* 🚨 [핵심] 모바일 환경에서 도면 가로 스크롤(스와이프) 완벽 활성화 */
-    .stApp, .block-container {
+    /* 🚨 [핵심 해결] 1. 앱 전체가 아닌 '도면을 감싸는 박스'만 가로 스크롤 허용 */
+    div[data-testid="stComponentBlock"] {
         overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch !important; 
+        -webkit-overflow-scrolling: touch !important;
+        width: 100% !important;
+        border: 2px solid #ddd; /* 도면 영역 구분을 위해 얇은 테두리 추가 */
+        border-radius: 8px;
     }
     
-    /* 🚨 이미지 좌표 컴포넌트가 모바일 화면에 맞춰 작아지는 현상 원천 차단 */
-    iframe {
-        min-width: 1000px !important; 
+    /* 🚨 [핵심 해결] 2. 폰 화면이 작아도 도면(iframe)이 짤리지 않게 강제 1000px 유지 */
+    div[data-testid="stComponentBlock"] iframe {
+        width: 1000px !important; 
+        max-width: none !important; 
     }
 </style>
 """, unsafe_allow_html=True)
@@ -115,10 +119,6 @@ st.markdown("""
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
-
-# 💡 사진 미등록 시 발생하는 TypeError 방지 함수
-def is_valid_url(url):
-    return isinstance(url, str) and url.startswith("http")
 
 def upload_image_to_imgbb(file_bytes):
     try: api_key = st.secrets["IMGBB_API_KEY"]
@@ -146,7 +146,6 @@ def upload_image_to_imgbb(file_bytes):
     except Exception as e: return f"ERROR: 코드 실행 오류 ({str(e)})"
 
 conn = st.connection("gsheets", type=GSheetsConnection)
-# 💡 API 에러(차단) 방지를 위해 ttl=0 을 ttl=5 로 변경
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=5)
 
 if df.empty:
@@ -184,12 +183,11 @@ def show_defect_details(row_idx, row_data, map_image):
     col_img1, col_img2 = st.columns(2)
     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
 
-    # 💡 URL 검증 안전장치 적용
     with col_img1:
-        if is_valid_url(p1_url): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
+        if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
         else: st.info("등록된 사진 1 없음")
     with col_img2:
-        if is_valid_url(p2_url): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
+        if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
         else: st.info("등록된 사진 2 없음")
             
     with st.expander("🔄 사진 변경/추가하기 (선택사항)"):
@@ -485,7 +483,8 @@ with col2:
 
 st.markdown("""
     <div class="info-box">
-        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
+        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.<br>
+        📱 <b>모바일에서는 얇은 테두리 안쪽(도면 영역)을 밀면 원본 크기 그대로 좌우로 볼 수 있습니다.</b>
     </div>
 """, unsafe_allow_html=True)
 
