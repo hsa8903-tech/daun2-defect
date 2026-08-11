@@ -97,13 +97,16 @@ st.markdown("""
         transition: all 0.3s ease !important;
     }
     
-    /* 🚨 모바일 폰에서 도면 좌우 스크롤(스와이프) 강제 허용 */
-    .stApp, .block-container, div[data-testid="stVerticalBlock"] {
+    /* 🚨 도면이 폰 화면에 맞춰 작아지는 것을 막고 원본(최소) 크기 강제 유지! */
+    div[data-testid="stComponentBlock"] > iframe {
+        min-width: 800px !important; 
+        max-width: none !important;
+    }
+    
+    /* 🚨 도면을 감싼 컨테이너에 모바일 터치 스와이프(스크롤) 완벽 활성화 */
+    .stApp, .block-container, div[data-testid="stComponentBlock"], div[data-testid="stVerticalBlock"] {
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch !important; 
-    }
-    iframe {
-        max-width: none !important; 
     }
 </style>
 """, unsafe_allow_html=True)
