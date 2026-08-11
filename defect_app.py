@@ -96,6 +96,15 @@ st.markdown("""
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
     }
+    
+    /* 🚨 모바일 폰에서 도면 좌우 스크롤(스와이프) 강제 허용 */
+    .stApp, .block-container, div[data-testid="stVerticalBlock"] {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important; 
+    }
+    iframe {
+        max-width: none !important; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -136,7 +145,7 @@ def upload_image_to_imgbb(file_bytes):
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 💡 구글 API 통신 거절 에러(디도스 방지) 해결: ttl=5 로 변경!
+# 💡 구글 API 통신 거절 에러(디도스 방지) 해결: ttl=5 
 df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=5)
 
 if df.empty:
@@ -474,12 +483,13 @@ with col2:
 
 st.markdown("""
     <div class="info-box">
-        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
+        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.<br>
+        📱 <b>모바일에서는 도면을 좌우로 스와이프(밀기)하여 전체 영역을 확인할 수 있습니다.</b>
     </div>
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------------------------------
-# 🚨 도면 기능: Folium 제거 및 기존 클릭(X, Y) 방식(streamlit-image-coordinates)으로 원복
+# 🚨 직관적인 좌표 터치 방식 (streamlit-image-coordinates)
 # -------------------------------------------------------------------------
 
 try: base_img = Image.open(floor_img_map.get(selected_floor, "ground_map.jpg"))
