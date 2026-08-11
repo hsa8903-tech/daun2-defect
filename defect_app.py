@@ -96,17 +96,6 @@ st.markdown("""
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
     }
-    
-    /* 🚨 1단계: 스트림릿 컨테이너들의 가로 잠금을 강제로 풀어버림 (모바일 스와이프 허용) */
-    .stApp, .main, .block-container, div[data-testid="stVerticalBlock"], .element-container {
-        overflow-x: auto !important;
-        -webkit-overflow-scrolling: touch !important; 
-    }
-    
-    /* 🚨 2단계: 도면 컴포넌트(iframe)가 폰 화면에 맞춰 쪼그라드는 것을 강제 차단 */
-    div[data-testid="stComponentBlock"] > iframe {
-        min-width: 1000px !important; 
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -485,17 +474,16 @@ with col2:
 
 st.markdown("""
     <div class="info-box">
-        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.<br>
-        📱 <b>모바일에서는 도면을 좌우로 스와이프(밀기)하여 넓은 영역을 직관적으로 확인할 수 있습니다.</b>
+        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
     </div>
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------------------------------
-# 🚨 3단계: 파이썬 내부에서 도면 컴포넌트의 '원본 너비'를 강제 주입하여 쪼그라듦 완벽 방지
+# 🚨 직관적인 좌표 터치 방식 (streamlit-image-coordinates)
 # -------------------------------------------------------------------------
 
 try: base_img = Image.open(floor_img_map.get(selected_floor, "ground_map.jpg"))
-except: base_img = Image.new('RGB', (1000, 800), color=(200, 200, 200))
+except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
 
@@ -535,12 +523,8 @@ for idx, row in current_floor_df.iterrows():
         draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
     except: pass
 
-# 원본 이미지의 너비를 구하고, 모바일 화면보다 확실히 큰 최소 1000px을 보장합니다.
-img_w, img_h = base_img.size
-force_width = img_w if img_w > 1000 else 1000
-
-# 폭(width) 변수를 강제로 집어넣어, 스트림릿이 폰 화면에 맞춰 이미지를 우그러뜨리는 것을 원천 차단합니다!
-value = streamlit_image_coordinates(base_img, width=force_width, key=f"map_{selected_floor}")
+# 이미지 송출 및 클릭한 곳의 X,Y 좌표 실시간으로 따오기
+value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
 
 if value is not None:
     if 'last_click' not in st.session_state or st.session_state['last_click'] != value:
