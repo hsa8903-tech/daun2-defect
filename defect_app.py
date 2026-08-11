@@ -5,10 +5,12 @@ import io
 import requests
 import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps 
-from streamlit_image_coordinates import streamlit_image_coordinates
 import math
 import streamlit.components.v1 as components 
-import datetime  
+import datetime 
+import folium
+from streamlit_folium import st_folium
+from folium import raster_layers
 
 # 페이지 기본 설정
 st.set_page_config(page_title="다운 2지구 B2BL 하자 관리 시스템", layout="wide")
@@ -105,6 +107,10 @@ st.markdown("""
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
+# URL 에러 방지를 위한 안전망 함수 추가
+def is_valid_url(url):
+    return isinstance(url, str) and url.startswith("http")
+
 def upload_image_to_imgbb(file_bytes):
     try: api_key = st.secrets["IMGBB_API_KEY"]
     except: return "ERROR: 스트림릿 Settings(Secrets)에 IMGBB_API_KEY 열쇠가 없습니다."
@@ -168,11 +174,12 @@ def show_defect_details(row_idx, row_data, map_image):
     col_img1, col_img2 = st.columns(2)
     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
 
+    # TypeError 해결: URL이 유효한지 철저하게 검사 후 송출
     with col_img1:
-        if pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR"): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
+        if is_valid_url(p1_url): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
         else: st.info("등록된 사진 1 없음")
     with col_img2:
-        if pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR"): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
+        if is_valid_url(p2_url): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
         else: st.info("등록된 사진 2 없음")
             
     with st.expander("🔄 사진 변경/추가하기 (선택사항)"):
@@ -236,8 +243,8 @@ def show_defect_details(row_idx, row_data, map_image):
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
-        photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
-        photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
+        photo1_html = f'<img src="{p1_url}" />' if is_valid_url(p1_url) else '<div class="no-img">사진 1 없음</div>'
+        photo2_html = f'<img src="{p2_url}" />' if is_valid_url(p2_url) else '<div class="no-img">사진 2 없음</div>'
         
         display_date = row_data.get('date', '')
         if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
@@ -424,8 +431,8 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
                     map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                     
                     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
-                    photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and p1_url and not str(p1_url).startswith("ERROR")) else '<div class="no-img">사진 1 없음</div>'
-                    photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and p2_url and not str(p2_url).startswith("ERROR")) else '<div class="no-img">사진 2 없음</div>'
+                    photo1_html = f'<img src="{p1_url}" />' if is_valid_url(p1_url) else '<div class="no-img">사진 1 없음</div>'
+                    photo2_html = f'<img src="{p2_url}" />' if is_valid_url(p2_url) else '<div class="no-img">사진 2 없음</div>'
                     
                     display_date = row_data.get('date', '')
                     if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
@@ -468,68 +475,107 @@ with col2:
 
 st.markdown("""
     <div class="info-box">
-        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
+        💡 <b>도면을 마우스나 손가락으로 이리저리 이동하고 확대/축소할 수 있습니다.</b> <br>
+        빈 곳을 터치하면 신규 등록, 기존 마커(원형)를 터치하면 수정 및 확인이 가능합니다.
     </div>
 """, unsafe_allow_html=True)
 
-try: base_img = Image.open(floor_img_map[selected_floor])
+# -------------------------------------------------------------------------
+# 🚨 전면 수정 구역: Folium 맵 (이동/확대 가능) 적용
+# -------------------------------------------------------------------------
+
+# A4 보고서용 베이스 이미지 로드 (이건 반드시 유지)
+try: base_img = Image.open(floor_img_map.get(selected_floor, "ground_map.jpg"))
 except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
-draw = ImageDraw.Draw(base_img)
+img_width, img_height = base_img.size
 
-# 마커 크기 2배 확대 (반지름 6)
-marker_radius = 6 
+# 1. 이동 가능한 빈 Folium 맵 생성 (CRS.Simple은 평면도용 설정)
+m = folium.Map(location=[img_height / 2, img_width / 2], zoom_start=1, crs='Simple', tiles=None)
 
-try: bold_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 18)
-except:
-    try: bold_font = ImageFont.truetype("malgunbd.ttf", 18)
-    except: bold_font = ImageFont.load_default()
+# 2. 로컬 도면 이미지를 스트림릿 Folium 안에 띄우기 위해 Base64로 인코딩
+buffered_map = io.BytesIO()
+base_img.save(buffered_map, format="JPEG")
+encoded_img = base64.b64encode(buffered_map.getvalue()).decode('utf-8')
+img_url_for_folium = f"data:image/jpeg;base64,{encoded_img}"
+
+# 3. 도면을 지도 위에 덮어씌우기
+bounds = [[0, 0], [img_height, img_width]]
+raster_layers.ImageOverlay(
+    image=img_url_for_folium,
+    bounds=bounds,
+    interactive=True
+).add_to(m)
 
 current_floor_df = df[df['floor'] == selected_floor]
 
+# 4. 저장된 기존 마커들을 Folium 도면 위에 띄우기
 for idx, row in current_floor_df.iterrows():
     if hide_completed and row['status'] == '완료': continue
     try:
-        x, y = float(row['x']), float(row['y'])
+        x_pil, y_pil = float(row['x']), float(row['y'])
+        
+        # A4 출력 이미지 좌표(PIL)와 지도 좌표(Folium) 보정식 적용 (Y축 반전)
+        f_lat = img_height - y_pil
+        f_lng = x_pil
+        
         if row['status'] == '완료': color = "green"
         else:
-            if row['title'] == '1. 설비': color = "blue"
-            elif row['title'] == '2. 소방': color = "red"
-            elif row['title'] == '3. 자동제어': color = "#FFC000" 
-            elif row['title'] == '4. 전기': color = "#FF7F50" 
-            elif row['title'] == '5. 통신': color = "#00CED1" 
-            elif row['title'] == '6. EV': color = "#FF1493" 
-            elif row['title'] == '7. 기타': color = "purple"
-            else: color = "red" 
-            
-        draw.ellipse((x - marker_radius, y - marker_radius, x + marker_radius, y + marker_radius), fill=color, outline="white", width=1)
-        text_num = str(int(row['id']))
-        text_x, text_y = x + 12, y - 15
+            color_map = {'1. 설비': 'blue', '2. 소방': 'red', '3. 자동제어': '#FFC000', '4. 전기': '#FF7F50', '5. 통신': '#00CED1', '6. EV': '#FF1493', '7. 기타': 'purple'}
+            color = color_map.get(row['title'], 'red')
+
+        # 색상 마커 (동그라미)
+        folium.CircleMarker(
+            location=[f_lat, f_lng],
+            radius=12,
+            color="white",
+            weight=2,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.9,
+            tooltip=f"No.{int(row['id'])} / {row['title']}"
+        ).add_to(m)
         
-        draw.text((text_x-1, text_y), text_num, fill="white", font=bold_font)
-        draw.text((text_x+1, text_y), text_num, fill="white", font=bold_font)
-        draw.text((text_x, text_y-1), text_num, fill="white", font=bold_font)
-        draw.text((text_x, text_y+1), text_num, fill="white", font=bold_font)
-        draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
+        # 마커 안의 숫자 표시
+        folium.Marker(
+            location=[f_lat, f_lng],
+            icon=folium.DivIcon(html=f'<div style="font-size:11pt; color:black; font-weight:bold; background:rgba(255,255,255,0.8); border-radius:50%; width:22px; height:22px; text-align:center; line-height:22px; box-shadow: 1px 1px 3px rgba(0,0,0,0.5);">{int(row["id"])}</div>')
+        ).add_to(m)
     except: pass
 
-value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
+# 5. 화면에 완성된 반응형 도면 송출
+map_data = st_folium(m, width=img_width if img_width > 800 else 800, height=img_height if img_height > 600 else 600, key=f"folium_map_{selected_floor}")
+
+# 6. 클릭(터치) 좌표 획득 및 액션 처리
+value = map_data.get("last_clicked") if map_data else None
 
 if value is not None:
+    # 스트림릿 무한 루프(Dialog 중복 실행) 방지 처리
     if 'last_click' not in st.session_state or st.session_state['last_click'] != value:
         st.session_state['last_click'] = value
-        clicked_x, clicked_y = value['x'], value['y']
+        
+        f_lat, f_lng = value['lat'], value['lng']
+        
+        # Folium 좌표를 다시 A4 출력용 PIL 좌표로 원상 복구
+        clicked_x = f_lng
+        clicked_y = img_height - f_lat
+        
         clicked_marker_idx, clicked_marker_data = None, None
         
+        # 클릭한 위치 근처에 기존 마커가 있는지 거리 계산
         for idx, row in current_floor_df.iterrows():
             if hide_completed and row['status'] == '완료': continue
             try:
                 mx, my = float(row['x']), float(row['y'])
                 dist = math.sqrt((mx - clicked_x)**2 + (my - clicked_y)**2)
-                if dist <= 20.0: 
+                if dist <= 30.0:  # 터치 인식 반경 확대
                     clicked_marker_idx, clicked_marker_data = idx, row
                     break
             except: pass
         
-        if clicked_marker_data is not None: show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
-        else: register_defect(clicked_x, clicked_y, selected_floor)
+        if clicked_marker_data is not None:
+            # 기존 마커 터치 시: 정보 수정 및 확인 창 오픈
+            show_defect_details(clicked_marker_idx, clicked_marker_data, base_img)
+        else:
+            # 빈 공간 터치 시: 신규 등록 창 오픈
+            register_defect(clicked_x, clicked_y, selected_floor)
