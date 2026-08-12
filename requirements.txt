@@ -3,5 +3,4 @@ pandas
 st-gsheets-connection
 Pillow
 requests
-folium
-streamlit-folium
+streamlit-image-coordinates
