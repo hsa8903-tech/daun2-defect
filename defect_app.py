@@ -100,12 +100,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🚨 설비팀 시트 주소
+# 🚨 [수정할 부분] 설비팀 시트 주소 확인!
 # ==========================================
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 사진 에러 방지 함수
+# 💡 핵심 해결: 구글 시트의 빈칸(0)이나 잡동사니를 걸러내는 진짜 안전망
 def is_valid_url(url):
     return isinstance(url, str) and url.startswith("http")
 
@@ -135,7 +135,7 @@ def upload_image_to_imgbb(file_bytes):
     except Exception as e: return f"ERROR: 코드 실행 오류 ({str(e)})"
 
 conn = st.connection("gsheets", type=GSheetsConnection)
-df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=5)
+df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
 
 if df.empty:
     df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2', 'date'])
@@ -145,6 +145,7 @@ else:
     if 'date' not in df.columns: df['date'] = ""
     if 'floor' not in df.columns: df['floor'] = '지하 1층'
 
+# 설비팀 공종 리스트
 category_list = ["1. 설비", "2. 소방", "3. 자동제어", "4. 전기", "5. 통신", "6. EV", "7. 기타"]
 
 floor_img_map = {
@@ -171,6 +172,7 @@ def show_defect_details(row_idx, row_data, map_image):
     col_img1, col_img2 = st.columns(2)
     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
 
+    # 💡 여기서 0을 사진으로 착각하지 않도록 is_valid_url 검증을 적용했습니다.
     with col_img1:
         if pd.notna(p1_url) and is_valid_url(p1_url): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
         else: st.info("등록된 사진 1 없음")
@@ -239,6 +241,7 @@ def show_defect_details(row_idx, row_data, map_image):
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
+        # 💡 HTML 보고서에도 동일하게 안전망 적용
         photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and is_valid_url(p1_url)) else '<div class="no-img">사진 1 없음</div>'
         photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and is_valid_url(p2_url)) else '<div class="no-img">사진 2 없음</div>'
         
@@ -400,7 +403,7 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
                     .text-section { height: 38%; display: flex; flex-direction: column; gap: 3mm;}
                     .info-header { display: flex; gap: 2mm; align-items: center; }
                     .info-floor { font-size: 16pt; font-weight: bold; color: #555; }
-                    .info-title { flex-grow: 1; font-size: 17pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; display: flex; align-items: center; justify-content: space-between;}}
+                    .info-title { flex-grow: 1; font-size: 17pt; font-weight: bold; background-color: #f4f4f4; padding: 8px 15px; border-radius: 4px; border-left: 5px solid #132B45; display: flex; align-items: center; justify-content: space-between;}
                     .info-date { font-size: 12pt; font-weight: normal; color: #666; }
                     .info-detail-box { border: 1px solid #ccc; border-radius: 4px; padding: 10px; height: 100%; overflow: hidden; }
                     .info-detail-label { font-size: 14pt; font-weight: bold; color: #333; margin-bottom: 5px; display: block;}
@@ -427,6 +430,7 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
                     map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                     
                     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
+                    # 💡 일괄 출력용 HTML에도 안전망 완벽 적용
                     photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and is_valid_url(p1_url)) else '<div class="no-img">사진 1 없음</div>'
                     photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and is_valid_url(p2_url)) else '<div class="no-img">사진 2 없음</div>'
                     
@@ -471,16 +475,11 @@ with col2:
 
 st.markdown("""
     <div class="info-box">
-        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.<br>
-        📱 <b>모바일에서는 테두리 쳐진 도면 구역 안을 손가락으로 밀면 좌우로 이동할 수 있습니다.</b>
+        💡 <b>도면의 빈 곳</b>을 터치하면 신규 등록, <b>마커(동그라미)</b>를 터치하면 수정 및 A4 출력이 가능합니다.
     </div>
 """, unsafe_allow_html=True)
 
-# -------------------------------------------------------------------------
-# 🚨 도면 송출 및 동적 CSS 자동 주입 구역 (짤림 완벽 방지)
-# -------------------------------------------------------------------------
-
-try: base_img = Image.open(floor_img_map.get(selected_floor, "ground_map.jpg"))
+try: base_img = Image.open(floor_img_map[selected_floor])
 except: base_img = Image.new('RGB', (800, 600), color=(200, 200, 200))
 
 draw = ImageDraw.Draw(base_img)
@@ -520,33 +519,6 @@ for idx, row in current_floor_df.iterrows():
         draw.text((text_x, text_y), text_num, fill="black", font=bold_font)
     except: pass
 
-# 💡 [핵심 해결 로직] 도면이 짤리지 않게 하려면, 스트림릿이 맘대로 높이를 정하게 둬선 안 됩니다!
-# 파이썬이 실시간으로 도면 원본 비율을 계산해서 1000px 기준의 완벽한 높이를 강제로 주사해 버립니다.
-img_w, img_h = base_img.size
-render_w = max(img_w, 1000) # 모바일 최적 너비 1000px 보장
-render_h = int(img_h * (render_w / img_w)) # 원본 비율 그대로 높이(Height) 산출
-
-st.markdown(f"""
-<style>
-    /* 1. 딱 도면이 들어가는 박스(element-container)만 가로 스크롤 허용! (앱 전체가 흔들리지 않음) */
-    div[data-testid="element-container"]:has(iframe[title*="streamlit_image_coordinates"]) {{
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        -webkit-overflow-scrolling: touch !important;
-        border: 2px solid #132B45; 
-        border-radius: 8px;
-    }}
-    
-    /* 2. 도면을 출력하는 액자(iframe)의 너비와 높이를 파이썬이 계산한 수치로 100% 강제 고정! (짤림 방지) */
-    iframe[title*="streamlit_image_coordinates"] {{
-        width: {render_w}px !important;
-        height: {render_h}px !important;
-        max-width: none !important;
-    }}
-</style>
-""", unsafe_allow_html=True)
-
-# 계산된 완벽한 틀 안에서 도면 좌표 송출
 value = streamlit_image_coordinates(base_img, key=f"map_{selected_floor}")
 
 if value is not None:
