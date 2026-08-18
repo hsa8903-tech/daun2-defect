@@ -96,6 +96,12 @@ st.markdown("""
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
     }
+    
+    /* 모바일 환경에서 도면 가로 스크롤(스와이프) 허용 */
+    .stApp, .block-container {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,7 +111,7 @@ st.markdown("""
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1w3f9ACaJbdHB09tDFEKAT12DYB8Vun3vg_4zyJcQ7GM/edit"
 # ==========================================
 
-# 💡 핵심 해결: 구글 시트의 빈칸(0)이나 잡동사니를 걸러내는 진짜 안전망
+# 💡 핵심 해결: 구글 시트의 빈칸이나 '0'을 걸러내는 진짜 안전망
 def is_valid_url(url):
     return isinstance(url, str) and url.startswith("http")
 
@@ -135,7 +141,7 @@ def upload_image_to_imgbb(file_bytes):
     except Exception as e: return f"ERROR: 코드 실행 오류 ({str(e)})"
 
 conn = st.connection("gsheets", type=GSheetsConnection)
-df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=0)
+df = conn.read(spreadsheet=SHEET_URL, worksheet="Sheet1", ttl=5)
 
 if df.empty:
     df = pd.DataFrame(columns=['id', 'floor', 'x', 'y', 'title', 'detail', 'status', 'photo_url', 'photo_url_2', 'date'])
@@ -172,12 +178,12 @@ def show_defect_details(row_idx, row_data, map_image):
     col_img1, col_img2 = st.columns(2)
     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
 
-    # 💡 여기서 0을 사진으로 착각하지 않도록 is_valid_url 검증을 적용했습니다.
+    # 💡 여기서 '0'을 사진으로 착각하지 않도록 is_valid_url 검증을 완벽하게 적용했습니다!
     with col_img1:
-        if pd.notna(p1_url) and is_valid_url(p1_url): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
+        if is_valid_url(p1_url): st.image(p1_url, caption="현재 사진 1", use_container_width=True)
         else: st.info("등록된 사진 1 없음")
     with col_img2:
-        if pd.notna(p2_url) and is_valid_url(p2_url): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
+        if is_valid_url(p2_url): st.image(p2_url, caption="현재 사진 2", use_container_width=True)
         else: st.info("등록된 사진 2 없음")
             
     with st.expander("🔄 사진 변경/추가하기 (선택사항)"):
@@ -241,9 +247,9 @@ def show_defect_details(row_idx, row_data, map_image):
         print_img.save(buffered, format="JPEG")
         map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         
-        # 💡 HTML 보고서에도 동일하게 안전망 적용
-        photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and is_valid_url(p1_url)) else '<div class="no-img">사진 1 없음</div>'
-        photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and is_valid_url(p2_url)) else '<div class="no-img">사진 2 없음</div>'
+        # 💡 HTML 출력물에서도 동일하게 에러 방지 적용
+        photo1_html = f'<img src="{p1_url}" />' if is_valid_url(p1_url) else '<div class="no-img">사진 1 없음</div>'
+        photo2_html = f'<img src="{p2_url}" />' if is_valid_url(p2_url) else '<div class="no-img">사진 2 없음</div>'
         
         display_date = row_data.get('date', '')
         if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
@@ -430,9 +436,8 @@ with st.expander("🖨️ 공종 및 기간별 보고서 일괄 출력 (모아�
                     map_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
                     
                     p1_url, p2_url = row_data.get('photo_url'), row_data.get('photo_url_2')
-                    # 💡 일괄 출력용 HTML에도 안전망 완벽 적용
-                    photo1_html = f'<img src="{p1_url}" />' if (pd.notna(p1_url) and is_valid_url(p1_url)) else '<div class="no-img">사진 1 없음</div>'
-                    photo2_html = f'<img src="{p2_url}" />' if (pd.notna(p2_url) and is_valid_url(p2_url)) else '<div class="no-img">사진 2 없음</div>'
+                    photo1_html = f'<img src="{p1_url}" />' if is_valid_url(p1_url) else '<div class="no-img">사진 1 없음</div>'
+                    photo2_html = f'<img src="{p2_url}" />' if is_valid_url(p2_url) else '<div class="no-img">사진 2 없음</div>'
                     
                     display_date = row_data.get('date', '')
                     if pd.isna(display_date) or display_date == "": display_date = "날짜 미상"
